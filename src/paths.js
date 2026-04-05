@@ -1,7 +1,12 @@
 /**
+ * @typedef {{ is_shared: true, title: string, content_model: string, kind: 'module' | 'template' }} MappedShared
+ * @typedef {{ is_shared: false, title: string, content_model: string, kind: 'module' | 'template' }} MappedSite
+ */
+
+/**
  * @param {string} relative_path posix-style path relative to repo root
  * @param {{ css_content_model?: string }} [options]
- * @returns {{ site_id: string, title: string, content_model: string, kind: 'module' | 'template' } | null}
+ * @returns {MappedShared | MappedSite | null}
  */
 function map_repo_path(relative_path, options = {}) {
   const css_content_model = options.css_content_model ?? 'sanitized-css';
@@ -14,11 +19,12 @@ function map_repo_path(relative_path, options = {}) {
 
   if (parts.length < 4) {
     throw new Error(
-      `WikiWire: path too shallow (need ${root}/<site_id>/<root_name>/<file>): ${relative_path}`,
+      `WikiWire: path too shallow (need ${root}/<path_segment>/<root_name>/<file>): ${relative_path}`,
     );
   }
 
-  const site_id = parts[1];
+  const path_segment = parts[1];
+  const is_shared = path_segment === 'shared';
   const root_name = parts[2];
   const rest = parts.slice(3);
   const rel_under_root = rest.join('/');
@@ -32,7 +38,7 @@ function map_repo_path(relative_path, options = {}) {
 
     if (rel_under_root === `${root_name}.module.lua`) {
       return {
-        site_id,
+        is_shared,
         title: `Module:${root_name}`,
         content_model: 'scribunto',
         kind: 'module',
@@ -40,7 +46,7 @@ function map_repo_path(relative_path, options = {}) {
     }
     if (rel_under_root === 'doc.wikitext') {
       return {
-        site_id,
+        is_shared,
         title: `Module:${root_name}/doc`,
         content_model: 'wikitext',
         kind: 'module',
@@ -49,7 +55,7 @@ function map_repo_path(relative_path, options = {}) {
 
     const content_model = content_model_for_module_subfile(rel_under_root, css_content_model);
     return {
-      site_id,
+      is_shared,
       title: `Module:${root_name}/${rel_under_root}`,
       content_model,
       kind: 'module',
@@ -58,7 +64,7 @@ function map_repo_path(relative_path, options = {}) {
 
   if (rest.length !== 1) {
     throw new Error(
-      `WikiWire: template path must be templates/<site>/<name>/<name>.template.wikitext: ${relative_path}`,
+      `WikiWire: template path must be templates/<path_segment>/<name>/<name>.template.wikitext: ${relative_path}`,
     );
   }
   const file = rest[0];
@@ -68,7 +74,7 @@ function map_repo_path(relative_path, options = {}) {
     );
   }
   return {
-    site_id,
+    is_shared,
     title: `Template:${root_name}`,
     content_model: 'wikitext',
     kind: 'template',

@@ -99,7 +99,7 @@ async function run() {
     throw new Error(`WikiWire: config not found: ${full_config}`);
   }
 
-  const { sites } = load_config(full_config);
+  const { sites, shared: shared_enabled, path_to_site } = load_config(full_config);
 
   /** @type {import('ignore').Ignore} */
   let ign = ignore();
@@ -110,18 +110,58 @@ async function run() {
 
   const changed = await list_changed_paths({ workspace, sync_all, ign });
 
-  /** @type {{ file: string, mapped: { site_id: string, title: string, content_model: string, kind: string }, site_cfg: { id: string, api: string, dry_run: boolean, default_branch: string | null, css_content_model: string } }[]} */
+  /** @type {{ file: string, mapped: { is_shared: boolean, title: string, content_model: string, kind: string }, site_cfg: { id: string, api: string, dry_run: boolean, default_branch: string | null, css_content_model: string } }[]} */
   const jobs = [];
 
   for (const file of changed) {
     if (!file.startsWith('modules/') && !file.startsWith('templates/')) continue;
 
     const parts = file.split('/').filter(Boolean);
-    const site_id = parts[1];
-    const site_cfg = sites.get(site_id);
+    if (parts.some((p) => p.startsWith('_'))) {
+      core.info(`WikiWire: skip path with underscore segment ${file}`);
+      continue;
+    }
+
+    const path_segment = parts[1];
+
+    if (path_segment === 'shared') {
+      if (!shared_enabled) {
+        throw new Error(
+          `WikiWire: ${file} uses modules/shared or templates/shared; set shared = true in wikiwire.toml or move the file under a site path`,
+        );
+      }
+
+      const full_file = path.join(workspace, file);
+      if (!fs.existsSync(full_file)) {
+        core.info(`WikiWire: skip missing or removed file ${file}`);
+        continue;
+      }
+
+      const ref = github.context.ref;
+
+      for (const site_cfg of sites.values()) {
+        if (site_cfg.default_branch && ref !== `refs/heads/${site_cfg.default_branch}`) {
+          core.info(
+            `WikiWire: skip ${file} for site ${site_cfg.id} (ref ${ref} is not refs/heads/${site_cfg.default_branch})`,
+          );
+          continue;
+        }
+
+        const mapped = map_repo_path(file, {
+          css_content_model: site_cfg.css_content_model,
+        });
+        if (!mapped) continue;
+
+        jobs.push({ file, mapped, site_cfg });
+      }
+
+      continue;
+    }
+
+    const site_cfg = path_to_site.get(path_segment);
     if (!site_cfg) {
       throw new Error(
-        `WikiWire: unknown site id "${site_id}" in path ${file} (add [[sites]] with id = '${site_id}')`,
+        `WikiWire: unknown path segment "${path_segment}" in ${file} (add [[sites]] whose id or host matches this directory name)`,
       );
     }
 
@@ -176,7 +216,9 @@ async function run() {
     const dry = input_dry || job.site_cfg.dry_run;
 
     if (dry) {
-      core.info(`WikiWire: [dry-run] would edit ${job.mapped.title} <= ${job.file}`);
+      core.info(
+        `WikiWire: [dry-run] would edit ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}`,
+      );
       continue;
     }
 
@@ -189,7 +231,7 @@ async function run() {
       `WikiWire: sync ${job.file}`,
       job.mapped.content_model,
     );
-    core.info(`WikiWire: updated ${job.mapped.title}`);
+    core.info(`WikiWire: updated ${job.mapped.title} on ${job.site_cfg.id}`);
   }
 }
 

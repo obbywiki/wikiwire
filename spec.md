@@ -4,10 +4,14 @@ WikiWire is a GitHub Action that syncs changed files under `modules/` and `templ
 
 ## Repository layout
 
-Wiki content lives next to your wiki’s logical site id (usually a hostname):
+Wiki content lives under a **path segment** (second directory under `modules/` or `templates/`):
 
-- **Modules:** `modules/<site_id>/<root_name>/…`
-- **Templates:** `templates/<site_id>/<root_name>/…`
+- **Modules:** `modules/<path_segment>/<root_name>/…`
+- **Templates:** `templates/<path_segment>/<root_name>/…`
+
+For a normal site, `<path_segment>` is the site’s `id` in `wikiwire.toml`, or its optional `host` value if set (see configuration). That keeps a stable `id` in config while the repo folder can stay a hostname.
+
+**Shared bucket (optional):** If `shared = true` in `wikiwire.toml`, `modules/shared/` and `templates/shared/` are synced to **every** configured site. Wiki titles are the same as for a single site (the `shared` segment is not part of the title). When `shared` is false, paths under `modules/shared/` or `templates/shared/` cause the action to fail with a clear error.
 
 Example:
 
@@ -17,21 +21,26 @@ modules/obbywiki.com/GroupLink/doc.wikitext
 modules/obbywiki.com/GroupLink/styles.css
 modules/obbywiki.com/GroupLink/i18n/en.json
 templates/obbywiki.com/Infobox/Infobox.template.wikitext
+modules/shared/CommonUtil/CommonUtil.module.lua
 ```
 
-- `<site_id>` must match a `[[sites]]` entry in `wikiwire.toml` (`id`).
+- `<path_segment>` must match a site’s `id` or `host`, or be the literal `shared` when `shared = true`.
 - `<root_name>` is the module or template root (e.g. `GroupLink`). For the main module file and template file, the basename in the filename must match `<root_name>`.
+
+### Paths skipped automatically
+
+Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/…`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/…`.
 
 ## Path to wiki title mapping
 
 | Root | Repository path | Wiki title | Content model |
 |------|-------------------|------------|----------------|
-| `modules` | `modules/<site>/<root>/<root>.module.lua` | `Module:<root>` | `scribunto` |
-| `modules` | `modules/<site>/<root>/doc.wikitext` | `Module:<root>/doc` | `wikitext` |
-| `modules` | `modules/<site>/<root>/<any other path>` | `Module:<root>/<any other path>` | See below |
-| `templates` | `templates/<site>/<root>/<root>.template.wikitext` | `Template:<root>` | `wikitext` |
+| `modules` | `modules/<path_segment>/<root>/<root>.module.lua` | `Module:<root>` | `scribunto` |
+| `modules` | `modules/<path_segment>/<root>/doc.wikitext` | `Module:<root>/doc` | `wikitext` |
+| `modules` | `modules/<path_segment>/<root>/<any other path>` | `Module:<root>/<any other path>` | See below |
+| `templates` | `templates/<path_segment>/<root>/<root>.template.wikitext` | `Template:<root>` | `wikitext` |
 
-Any other file under `modules/<site>/<root>/` maps 1:1: the wiki subpage path is exactly the relative path under `<root>/`, including nested directories (for example `i18n/en.json` becomes `Module:GroupLink/i18n/en.json`).
+Any other file under `modules/<path_segment>/<root>/` maps 1:1: the wiki subpage path is exactly the relative path under `<root>/`, including nested directories (for example `i18n/en.json` becomes `Module:GroupLink/i18n/en.json`).
 
 ### Content models (non-special files under `modules/`)
 
@@ -57,12 +66,14 @@ Place at the repository root unless you override with the `config_path` action i
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
 | `version` | integer | no | Config schema version; default `1`. Reserved for future use. |
+| `shared` | boolean | no | If true, enables `modules/shared/` and `templates/shared/`, synced to every `[[sites]]` entry. Default false. |
 
 ### `[[sites]]` (repeatable)
 
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
-| `id` | string | yes | Must equal the `<site_id>` directory name under `modules/` and `templates/`. |
+| `id` | string | yes | Stable site key (sessions, logs). Must be unique across rows. |
+| `host` | string | no | Directory name under `modules/` and `templates/`. If omitted, defaults to `id`. Must be unique across sites. Cannot be `shared` when `shared = true` (that name is reserved). |
 | `api` | string | yes | Full MediaWiki API URL, e.g. `https://example.org/w/api.php`. |
 | `dry_run` | boolean | no | If true, only log planned edits; no `action=edit` requests for this site. |
 | `default_branch` | string | no | If set, the action skips syncing when the workflow ref is not this branch (e.g. `refs/heads/main`). |
@@ -72,13 +83,15 @@ Example:
 
 ```toml
 version = 1
+shared = true
 
 [[sites]]
 id = "obbywiki.com"
 api = "https://obbywiki.com/w/api.php"
 
 [[sites]]
-id = "dev.example.org"
+id = "dev"
+host = "dev.example.org"
 api = "https://dev.example.org/w/api.php"
 dry_run = true
 default_branch = "main"
