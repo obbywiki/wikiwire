@@ -1,5 +1,31 @@
 // MediaWiki Action API client (login, CSRF, edit) with in-memory cookies
 
+const WIKIWIRE_UA = 'WikiWire/1.0';
+
+/**
+ * @param {string} api_url
+ */
+function api_url_for_log(api_url) {
+  try {
+    const u = new URL(api_url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return '(invalid api URL)';
+  }
+}
+
+/**
+ * @param {string} text
+ * @param {number} max_len
+ */
+function summarize_error_body(text, max_len) {
+  const one_line = text.trim().replace(/\s+/g, ' ');
+  const is_html = /^\s*</.test(text) || /<html[\s>]/i.test(text.slice(0, 200));
+  const prefix = is_html ? 'body looks like HTML (WAF, proxy, or custom error page): ' : 'body: ';
+  if (one_line.length <= max_len) return prefix + one_line;
+  return prefix + `${one_line.slice(0, max_len)}…`;
+}
+
 class MediaWikiSession {
   /**
    * @param {string} api_url full api.php URL
@@ -53,17 +79,49 @@ class MediaWikiSession {
    */
   async _post(params) {
     const body = new URLSearchParams({ format: 'json', ...params });
+    const action = typeof params.action === 'string' ? params.action : '?';
     const res = await fetch(this.api_url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': WIKIWIRE_UA,
         ...this._cookie_header(),
       },
       body,
     });
+
     this._merge_set_cookie(res.headers);
+
     if (!res.ok) {
-      throw new Error(`WikiWire: HTTP ${res.status} from MediaWiki API`);
+      const detail = await res.text();
+      const bits = [
+        `HTTP ${res.status} ${res.statusText}`,
+        `action=${action}`,
+        `api=${api_url_for_log(this.api_url)}`,
+      ];
+
+      const cf_ray = res.headers.get('cf-ray');
+
+      if (cf_ray) bits.push(`cf-ray=${cf_ray}`);
+
+      const www_auth = res.headers.get('www-authenticate');
+
+      if (www_auth) bits.push(`www-authenticate=${www_auth}`);
+
+      const server = res.headers.get('server');
+
+      if (server) bits.push(`server=${server}`);
+
+      const body_note = summarize_error_body(detail, 400);
+
+      let hint = '';
+
+      if (res.status === 403) {
+        hint =
+          ' (403 usually means the HTTP layer blocked the request—wrong URL, bot/WAF rules, IP allowlist, or missing Host/HTTPS—not a MediaWiki API error code.)';
+      }
+
+      throw new Error(`WikiWire: ${bits.join('; ')}. ${body_note}${hint}`);
     }
     return (await res.json()); // Record<string, unknown>
   }
