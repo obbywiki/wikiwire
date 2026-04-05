@@ -35,8 +35,7 @@ function walk_files(dir, workspace, out) {
 async function list_changed_paths(opts) {
   const { workspace, sync_all, ign } = opts;
   if (sync_all) {
-    /** @type {string[]} */
-    const out = [];
+    const out = []; // string[]
 
     for (const root of ['modules', 'templates']) {
       walk_files(path.join(workspace, root), workspace, out);

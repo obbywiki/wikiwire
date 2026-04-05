@@ -160,7 +160,7 @@ class MediaWikiSession {
     const data = await this._post(params);
 
     if (data.error) {
-      const err = /** @type {{ code?: string, info?: string }} */ (data.error);
+      const err = (data.error); // { code?: string, info?: string }
       throw new Error(`WikiWire: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`);
     };
 
