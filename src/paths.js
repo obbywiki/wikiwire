@@ -1,0 +1,96 @@
+/**
+ * @param {string} relative_path posix-style path relative to repo root
+ * @param {{ css_content_model?: string }} [options]
+ * @returns {{ site_id: string, title: string, content_model: string, kind: 'module' | 'template' } | null}
+ */
+function map_repo_path(relative_path, options = {}) {
+  const css_content_model = options.css_content_model ?? 'sanitized-css';
+  const normalized = relative_path.replace(/\\/g, '/').replace(/^\/+/, '');
+  const parts = normalized.split('/').filter(Boolean);
+  if (parts.length === 0) return null;
+
+  const root = parts[0];
+  if (root !== 'modules' && root !== 'templates') return null;
+
+  if (parts.length < 4) {
+    throw new Error(
+      `WikiWire: path too shallow (need ${root}/<site_id>/<root_name>/<file>): ${relative_path}`,
+    );
+  }
+
+  const site_id = parts[1];
+  const root_name = parts[2];
+  const rest = parts.slice(3);
+  const rel_under_root = rest.join('/');
+
+  if (root === 'modules') {
+    if (rel_under_root.endsWith('.template.wikitext')) {
+      throw new Error(
+        `WikiWire: ${relative_path}: .template.wikitext belongs under templates/, not modules/`,
+      );
+    }
+
+    if (rel_under_root === `${root_name}.module.lua`) {
+      return {
+        site_id,
+        title: `Module:${root_name}`,
+        content_model: 'scribunto',
+        kind: 'module',
+      };
+    }
+    if (rel_under_root === 'doc.wikitext') {
+      return {
+        site_id,
+        title: `Module:${root_name}/doc`,
+        content_model: 'wikitext',
+        kind: 'module',
+      };
+    }
+
+    const content_model = content_model_for_module_subfile(rel_under_root, css_content_model);
+    return {
+      site_id,
+      title: `Module:${root_name}/${rel_under_root}`,
+      content_model,
+      kind: 'module',
+    };
+  }
+
+  if (rest.length !== 1) {
+    throw new Error(
+      `WikiWire: template path must be templates/<site>/<name>/<name>.template.wikitext: ${relative_path}`,
+    );
+  }
+  const file = rest[0];
+  if (file !== `${root_name}.template.wikitext`) {
+    throw new Error(
+      `WikiWire: template file must be named ${root_name}.template.wikitext, got ${relative_path}`,
+    );
+  }
+  return {
+    site_id,
+    title: `Template:${root_name}`,
+    content_model: 'wikitext',
+    kind: 'template',
+  };
+}
+
+/**
+ * @param {string} rel_under_root path under module root (may include slashes)
+ * @param {string} css_content_model
+ */
+function content_model_for_module_subfile(rel_under_root, css_content_model) {
+  if (rel_under_root.endsWith('.module.lua')) return 'scribunto';
+  if (rel_under_root.endsWith('.wikitext')) return 'wikitext';
+  if (rel_under_root.endsWith('.css')) return css_content_model;
+  if (rel_under_root.endsWith('.json')) return 'json';
+
+  throw new Error(
+    `WikiWire: unsupported module subfile extension: ${rel_under_root} (allowed: .module.lua, .wikitext, .css, .json)`,
+  );
+}
+
+module.exports = {
+  map_repo_path,
+  content_model_for_module_subfile,
+};

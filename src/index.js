@@ -1,0 +1,199 @@
+const core = require('@actions/core');
+const github = require('@actions/github');
+const fs = require('node:fs');
+const path = require('node:path');
+const ignore = require('ignore');
+const { load_config } = require('./config');
+const { map_repo_path } = require('./paths');
+const { MediaWikiSession } = require('./mediawiki');
+
+/**
+ * @param {string | undefined} sha
+ */
+function is_zero_sha(sha) {
+  return !sha || /^0+$/.test(sha);
+}
+
+/**
+ * @param {string} dir
+ * @param {string} workspace
+ * @param {string[]} out
+ */
+function walk_files(dir, workspace, out) {
+  if (!fs.existsSync(dir)) return;
+
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, ent.name);
+
+    if (ent.isDirectory()) { walk_files(full, workspace, out) } else { out.push(path.relative(workspace, full).split(path.sep).join('/')) };
+  }
+}
+
+/**
+ * @param {{ workspace: string, sync_all: boolean, ign: import('ignore').Ignore }} opts
+ */
+async function list_changed_paths(opts) {
+  const { workspace, sync_all, ign } = opts;
+  if (sync_all) {
+    /** @type {string[]} */
+    const out = [];
+
+    for (const root of ['modules', 'templates']) {
+      walk_files(path.join(workspace, root), workspace, out);
+    }
+
+    return out.filter((f) => !ign.ignores(f));
+  }
+
+
+  const token = process.env.GITHUB_TOKEN;
+
+  if (!token) {
+    throw new Error('WikiWire: GITHUB_TOKEN is required when sync_all is false');
+  }
+
+
+  const octokit = github.getOctokit(token);
+  const { owner, repo } = github.context.repo;
+  const payload = github.context.payload;
+  const after = (payload).after ?? github.context.sha; // { after?: string }
+  const before = (payload).before ?? ''; // { before?: string }
+
+  let filenames = []; // string[]
+
+  if (is_zero_sha(before)) {
+    const { data } = await octokit.rest.repos.getCommit({ owner, repo, ref: after });
+    filenames = (data.files ?? []).map((f) => f.filename).filter(Boolean);
+  } else {
+    const { data } = await octokit.rest.repos.compareCommits({
+      owner,
+      repo,
+      base: before,
+      head: after,
+    });
+    filenames = (data.files ?? [])
+      .filter((f) => f.status !== 'removed')
+      .map((f) => f.filename)
+      .filter(Boolean);
+  }
+
+  return filenames.filter((f) => !ign.ignores(f));
+}
+
+async function run() {
+  const username = core.getInput('username', { required: true });
+  const password = core.getInput('password', { required: true });
+  const config_path = core.getInput('config_path') || 'wikiwire.toml';
+  const ignore_path = core.getInput('ignore_path') || '.wikiwireignore';
+  const input_dry = core.getInput('dry_run') === 'true';
+  const sync_all = core.getInput('sync_all') === 'true';
+
+  if (!sync_all && github.context.eventName !== 'push') {
+    throw new Error(
+      'WikiWire: use sync_all: true when the event is not push (e.g. workflow_dispatch)',
+    );
+  }
+
+  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+  const full_config = path.join(workspace, config_path);
+  if (!fs.existsSync(full_config)) {
+    throw new Error(`WikiWire: config not found: ${full_config}`);
+  }
+
+  const { sites } = load_config(full_config);
+
+  /** @type {import('ignore').Ignore} */
+  let ign = ignore();
+  const full_ignore = path.join(workspace, ignore_path);
+  if (fs.existsSync(full_ignore)) {
+    ign = ign.add(fs.readFileSync(full_ignore, 'utf8'));
+  }
+
+  const changed = await list_changed_paths({ workspace, sync_all, ign });
+
+  /** @type {{ file: string, mapped: { site_id: string, title: string, content_model: string, kind: string }, site_cfg: { id: string, api: string, dry_run: boolean, default_branch: string | null, css_content_model: string } }[]} */
+  const jobs = [];
+
+  for (const file of changed) {
+    if (!file.startsWith('modules/') && !file.startsWith('templates/')) continue;
+
+    const parts = file.split('/').filter(Boolean);
+    const site_id = parts[1];
+    const site_cfg = sites.get(site_id);
+    if (!site_cfg) {
+      throw new Error(
+        `WikiWire: unknown site id "${site_id}" in path ${file} (add [[sites]] with id = '${site_id}')`,
+      );
+    }
+
+    const ref = github.context.ref;
+    if (site_cfg.default_branch && ref !== `refs/heads/${site_cfg.default_branch}`) {
+      core.info(`WikiWire: skip ${file} (ref ${ref} is not refs/heads/${site_cfg.default_branch})`);
+      continue;
+    }
+
+    const full_file = path.join(workspace, file);
+    if (!fs.existsSync(full_file)) {
+      core.info(`WikiWire: skip missing or removed file ${file}`);
+      continue;
+    }
+
+    const mapped = map_repo_path(file, {
+      css_content_model: site_cfg.css_content_model,
+    });
+    if (!mapped) continue;
+
+    jobs.push({ file, mapped, site_cfg });
+  }
+
+  if (jobs.length === 0) {
+    core.info('WikiWire: nothing to sync');
+    return;
+  }
+
+  const sessions = new Map(); // Map<string, MediaWikiSession>
+
+  /**
+   * @param {string} site_id
+   */
+  async function get_session(site_id) {
+    const existing = sessions.get(site_id);
+
+    if (existing) return existing;
+
+    const cfg = sites.get(site_id);
+
+    if (!cfg) throw new Error(`WikiWire: internal error, missing site ${site_id}`);
+
+    const session = new MediaWikiSession(cfg.api, username, password);
+
+    await session.login();
+    sessions.set(site_id, session);
+
+    return session;
+  }
+
+  for (const job of jobs) {
+    const dry = input_dry || job.site_cfg.dry_run;
+
+    if (dry) {
+      core.info(`WikiWire: [dry-run] would edit ${job.mapped.title} <= ${job.file}`);
+      continue;
+    }
+
+    const session = await get_session(job.site_cfg.id);
+    const text = fs.readFileSync(path.join(workspace, job.file), 'utf8');
+
+    await session.edit(
+      job.mapped.title,
+      text,
+      `WikiWire: sync ${job.file}`,
+      job.mapped.content_model,
+    );
+    core.info(`WikiWire: updated ${job.mapped.title}`);
+  }
+}
+
+run().catch((err) => {
+  core.setFailed(err instanceof Error ? err.message : String(err));
+});

@@ -1,0 +1,33 @@
+name: WikiWire
+description: Sync your Git repositories with your live MediaWiki modules and templates
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  username:
+    description: The bot's username (Special:BotPasswords recommended with User@BotUser)
+    required: true
+  password:
+    description: The raw bot password (Special:BotPasswords recommended)
+    required: true
+  config_path:
+    description: Path to wikiwire.toml relative to the repository root
+    required: false
+    default: wikiwire.toml
+  ignore_path:
+    description: Path to .wikiwireignore relative to the repository root (optional file)
+    required: false
+    default: .wikiwireignore
+  dry_run:
+    description: If true, log edits only and do not call the MediaWiki API
+    required: false
+    default: "false"
+  sync_all:
+    description: If true, sync all files under modules/ and templates/ from the workspace instead of commit diffs (use for workflow_dispatch or full sync)
+    required: false
+    default: "false"
+
+runs:
+  using: node20
+  main: dist/index.js
