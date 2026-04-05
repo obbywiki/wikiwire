@@ -117,6 +117,8 @@ Use a workflow `permissions` block with at least `contents: read` so the default
 ### Example workflow
 
 ```yaml
+name: WikiWire
+
 on:
   push:
     branches: [main]
@@ -124,13 +126,14 @@ on:
 jobs:
   wikiwire:
     runs-on: ubuntu-latest
+    name: Sync files to upstream MediaWiki
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: obbywiki/wikiwire@v1
         with:
-          username: ${{ secrets.WIKI_USER }}
+          username: WikiWireBot@BotPasswordNameHere
           password: ${{ secrets.WIKI_PASSWORD }}
 ```
 
