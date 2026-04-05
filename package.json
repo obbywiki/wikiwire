@@ -1,6 +1,6 @@
 {
   "name": "wikiwire",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "GitHub Action: sync modules/templates to MediaWiki",
   "private": true,
   "main": "dist/index.js",
