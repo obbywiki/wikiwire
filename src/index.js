@@ -1,5 +1,5 @@
-const core = require('@actions/core');
-const github = require('@actions/github');
+import * as core from '@actions/core';
+import * as github from '@actions/github';
 const fs = require('node:fs');
 const path = require('node:path');
 const ignore = require('ignore');
