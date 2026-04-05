@@ -6,6 +6,7 @@ const ignore = require('ignore');
 const { load_config } = require('./config');
 const { map_repo_path } = require('./paths');
 const { MediaWikiSession } = require('./mediawiki');
+const { parse_site_credentials } = require('./site_credentials');
 
 /**
  * @param {string | undefined} sha
@@ -80,8 +81,9 @@ async function list_changed_paths(opts) {
 }
 
 async function run() {
-  const username = core.getInput('username', { required: true });
-  const password = core.getInput('password', { required: true });
+  const default_username = core.getInput('username');
+  const default_password = core.getInput('password');
+  const site_creds_map = parse_site_credentials(core.getInput('site_credentials') || '');
   const config_path = core.getInput('config_path') || 'wikiwire.toml';
   const ignore_path = core.getInput('ignore_path') || '.wikiwireignore';
   const input_dry = core.getInput('dry_run') === 'true';
@@ -95,11 +97,20 @@ async function run() {
 
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
   const full_config = path.join(workspace, config_path);
+  
   if (!fs.existsSync(full_config)) {
     throw new Error(`WikiWire: config not found: ${full_config}`);
   }
 
   const { sites, shared: shared_enabled, path_to_site } = load_config(full_config);
+
+  for (const cred_site_id of site_creds_map.keys()) {
+    if (!sites.has(cred_site_id)) {
+      core.warning(
+        `WikiWire: site_credentials has key "${cred_site_id}" which is not a site id in wikiwire.toml`,
+      );
+    }
+  }
 
   /** @type {import('ignore').Ignore} */
   let ign = ignore();
@@ -190,6 +201,33 @@ async function run() {
     return;
   }
 
+  /**
+   * @param {string} site_id
+   */
+  function credentials_for_site(site_id) {
+    const per_site = site_creds_map.get(site_id);
+    if (per_site) return per_site;
+    return {
+      username: default_username.trim(),
+      password: default_password.trim(),
+    };
+  }
+
+  const sites_needing_auth = new Set();
+  for (const job of jobs) {
+    if (input_dry || job.site_cfg.dry_run) continue;
+    sites_needing_auth.add(job.site_cfg.id);
+  }
+
+  for (const site_id of sites_needing_auth) {
+    const c = credentials_for_site(site_id);
+    if (!c.username || !c.password) {
+      throw new Error(
+        `WikiWire: missing credentials for site "${site_id}" (add it to site_credentials JSON or set global username and password inputs)`,
+      );
+    }
+  }
+
   const sessions = new Map(); // Map<string, MediaWikiSession>
 
   /**
@@ -204,6 +242,7 @@ async function run() {
 
     if (!cfg) throw new Error(`WikiWire: internal error, missing site ${site_id}`);
 
+    const { username, password } = credentials_for_site(site_id);
     const session = new MediaWikiSession(cfg.api, username, password);
 
     await session.login();

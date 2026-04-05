@@ -118,8 +118,9 @@ modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.template.wikitext
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `username` | yes | — | Bot username; with [Bot passwords](https://www.mediawiki.org/wiki/Manual:Bot_passwords), use `UserName@BotPasswordName`. |
-| `password` | yes | — | Bot password value. |
+| `username` | no | `""` | Default bot username for sites not listed in `site_credentials`. With [Bot passwords](https://www.mediawiki.org/wiki/Manual:Bot_passwords), use `UserName@BotPasswordName`. |
+| `password` | no | `""` | Default bot password for sites not listed in `site_credentials`. |
+| `site_credentials` | no | `""` | JSON object whose keys are site `id` values from `wikiwire.toml` (not `host`). Each value must be `{"username":"…","password":"…"}`. Overrides the global `username` / `password` for that site. Keys that do not match any configured site produce a workflow warning. |
 | `config_path` | no | `wikiwire.toml` | Path to the TOML config. |
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits are sent (site-level `dry_run` in TOML still applies per site). |
@@ -127,9 +128,14 @@ modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.template.wikitext
 
 Use a workflow `permissions` block with at least `contents: read` so the default `GITHUB_TOKEN` can call the compare API.
 
+Every site that performs a real (non–dry-run) sync must resolve to a username and password: either the global inputs or a matching entry in `site_credentials`.
+
 ### Example workflow
 
 ```yaml
+# This is a global WikiWire configuration file, a CI action which automatically syncs and uploads modules and templates from a Git repo towards a production or upstream MediaWiki instance via bot passwords and the MediaWiki Action API.
+# Learn more: https://github.com/obbywiki/wikiwire
+
 name: WikiWire
 
 on:
@@ -150,9 +156,31 @@ jobs:
           password: ${{ secrets.WIKI_PASSWORD }}
 ```
 
+### Example: different credentials per site
+
+Use `site_credentials` with one JSON object. Interpolate secrets per field, or store the entire JSON in a single secret and pass `site_credentials: ${{ secrets.WIKIWIRE_SITE_CREDENTIALS_JSON }}`.
+
+```yaml
+      - uses: obbywiki/wikiwire@v1
+        with:
+          site_credentials: |
+            {
+              "production.example": {
+                "username": "WikiWireBot@prod",
+                "password": "${{ secrets.WIKI_PASSWORD_PROD }}"
+              },
+              "dev": {
+                "username": "WikiWireBot@dev",
+                "password": "${{ secrets.WIKI_PASSWORD_DEV }}"
+              }
+            }
+```
+
+You can combine global `username` / `password` with `site_credentials`: only sites with an entry in the JSON use the per-site pair; all others use the defaults.
+
 ## Security
 
-- Store `password` in GitHub **secrets**, not in the workflow YAML.
+- Store `password` and per-site passwords in GitHub **secrets**, not in committed workflow YAML (except `${{ secrets.* }}` references).
 - Prefer **Bot passwords** with the minimum rights needed (`editpage`, `highvolume`, etc.).
 - The config file must remain free of secrets so it can be committed safely.
 

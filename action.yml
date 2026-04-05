@@ -6,11 +6,17 @@ branding:
 
 inputs:
   username:
-    description: The bot's username (Special:BotPasswords recommended with User@BotUser)
-    required: true
+    description: Default bot username for all sites (Special:BotPasswords recommended with User@BotUser). Optional if every site that needs sync has an entry in site_credentials.
+    required: false
+    default: ""
   password:
-    description: The raw bot password (Special:BotPasswords recommended)
-    required: true
+    description: Default bot password for all sites. Optional if every site that needs sync has an entry in site_credentials.
+    required: false
+    default: ""
+  site_credentials:
+    description: Optional JSON object mapping wikiwire.toml site id to {"username":"...","password":"..."} for per-wiki credentials in one workflow
+    required: false
+    default: ""
   config_path:
     description: Path to wikiwire.toml relative to the repository root
     required: false
