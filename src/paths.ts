@@ -1,14 +1,23 @@
-/**
- * @typedef {{ is_shared: true, title: string, content_model: string, kind: 'module' | 'template' }} MappedShared
- * @typedef {{ is_shared: false, title: string, content_model: string, kind: 'module' | 'template' }} MappedSite
- */
+export type MappedShared = {
+  is_shared: true;
+  title: string;
+  content_model: string;
+  kind: 'module' | 'template';
+};
 
-/**
- * @param {string} relative_path posix-style path relative to repo root
- * @param {{ css_content_model?: string }} [options]
- * @returns {MappedShared | MappedSite | null}
- */
-function map_repo_path(relative_path, options = {}) {
+export type MappedSite = {
+  is_shared: false;
+  title: string;
+  content_model: string;
+  kind: 'module' | 'template';
+};
+
+export type MappedPath = MappedShared | MappedSite;
+
+export function map_repo_path(
+  relative_path: string,
+  options: { css_content_model?: string } = {},
+): MappedPath | null {
   const css_content_model = options.css_content_model ?? 'sanitized-css';
   const normalized = relative_path.replace(/\\/g, '/').replace(/^\/+/, '');
   const parts = normalized.split('/').filter(Boolean);
@@ -81,11 +90,10 @@ function map_repo_path(relative_path, options = {}) {
   };
 }
 
-/**
- * @param {string} rel_under_root path under module root (may include slashes)
- * @param {string} css_content_model
- */
-function content_model_for_module_subfile(rel_under_root, css_content_model) {
+export function content_model_for_module_subfile(
+  rel_under_root: string,
+  css_content_model: string,
+): string {
   if (rel_under_root.endsWith('.module.lua')) return 'scribunto';
   if (rel_under_root.endsWith('.wikitext')) return 'wikitext';
   if (rel_under_root.endsWith('.css')) return css_content_model;
@@ -95,8 +103,3 @@ function content_model_for_module_subfile(rel_under_root, css_content_model) {
     `WikiWire: unsupported module subfile extension: ${rel_under_root} (allowed: .module.lua, .wikitext, .css, .json)`,
   );
 }
-
-module.exports = {
-  map_repo_path,
-  content_model_for_module_subfile,
-};

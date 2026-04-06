@@ -2,57 +2,70 @@
 
 const WIKIWIRE_UA = 'WikiWire/1.0';
 
-/**
- * @param {string} api_url
- */
-function api_url_for_log(api_url) {
+type mw_login = { result?: string; token?: string };
+type mw_query = {
+  tokens?: { logintoken?: string; csrftoken?: string };
+  pages?: Record<string, { missing?: boolean }>;
+};
+type mw_edit = { result?: string };
+type mw_error = { code?: string; info?: string };
+
+type mw_api_json = {
+  query?: mw_query;
+  login?: mw_login;
+  edit?: mw_edit;
+  error?: mw_error;
+};
+
+function api_url_for_log(api_url: string): string {
   try {
     const u = new URL(api_url);
+
     return `${u.origin}${u.pathname}`;
   } catch {
     return '(invalid api URL)';
   }
 }
 
-/**
- * @param {string} text
- * @param {number} max_len
- */
-function summarize_error_body(text, max_len) {
+function summarize_error_body(text: string, max_len: number): string {
   const one_line = text.trim().replace(/\s+/g, ' ');
   const is_html = /^\s*</.test(text) || /<html[\s>]/i.test(text.slice(0, 200));
   const prefix = is_html ? 'body looks like HTML (WAF, proxy, or custom error page): ' : 'body: ';
+
   if (one_line.length <= max_len) return prefix + one_line;
-  return prefix + `${one_line.slice(0, max_len)}…`;
+
+  return prefix + `${one_line.slice(0, max_len)}...`;
 }
 
-class MediaWikiSession {
-  /**
-   * @param {string} api_url full api.php URL
-   * @param {string} username
-   * @param {string} password
-   */
-  constructor(api_url, username, password) {
+function get_set_cookie_lines(headers: Headers): string[] {
+  const h = headers as Headers & { getSetCookie?: () => string[] };
+
+  if (typeof h.getSetCookie === 'function') {
+    return h.getSetCookie();
+  }
+
+  const sc = headers.get('set-cookie');
+
+  return sc ? [sc] : [];
+}
+
+export class MediaWikiSession {
+  api_url: string;
+  username: string;
+  password: string;
+  cookies: Map<string, string>;
+  csrf_token: string | null;
+
+  constructor(api_url: string, username: string, password: string) {
     this.api_url = api_url;
     this.username = username;
     this.password = password;
-    this.cookies = new Map(); // Map<string, string>
-    this.csrf_token = null; // string | null
+    this.cookies = new Map();
+    this.csrf_token = null;
   }
 
-  /**
-   * @param {Headers} headers
-   */
-  _merge_set_cookie(headers) {
-    let list = []; // string[]
-
-    if (typeof headers.getSetCookie === 'function') {
-      list = headers.getSetCookie();
-    } else {
-      const sc = headers.get('set-cookie');
-
-      if (sc) { list =  [sc] };
-    }
+  _merge_set_cookie(headers: Headers): void {
+    const list = get_set_cookie_lines(headers);
 
     for (const line of list) {
       const nv = line.split(';')[0].trim();
@@ -67,17 +80,15 @@ class MediaWikiSession {
     }
   }
 
-  _cookie_header() {
+  _cookie_header(): Record<string, string> {
     if (this.cookies.size === 0) return {};
+    
     return {
       Cookie: [...this.cookies.entries()].map(([k, v]) => `${k}=${v}`).join('; '),
     };
   }
 
-  /**
-   * @param {Record<string, string>} params
-   */
-  async _post(params) {
+  async _post(params: Record<string, string>): Promise<mw_api_json> {
     const body = new URLSearchParams({ format: 'json', ...params });
     const action = typeof params.action === 'string' ? params.action : '?';
     const res = await fetch(this.api_url, {
@@ -123,12 +134,12 @@ class MediaWikiSession {
 
       throw new Error(`WikiWire: ${bits.join('; ')}. ${body_note}${hint}`);
     }
-    return (await res.json()); // Record<string, unknown>
+    return (await res.json()) as mw_api_json;
   }
 
-  async login() {
+  async login(): Promise<void> {
     let data = await this._post({ action: 'query', meta: 'tokens', type: 'login' });
-    const query = (data.query); // { tokens?: { logintoken?: string } } | undefined
+    const query = data.query;
     let login_token = query?.tokens?.logintoken;
 
     if (!login_token) {
@@ -142,9 +153,7 @@ class MediaWikiSession {
       lgtoken: login_token,
     });
 
-    let login = ( // { result?: string, token?: string }
-      (data).login // { login?: unknown }
-    );
+    let login = data.login;
     while (login?.result === 'NeedToken' && login.token) {
       data = await this._post({
         action: 'login',
@@ -153,9 +162,7 @@ class MediaWikiSession {
         lgtoken: login.token,
       });
 
-      login = ( // { result?: string, token?: string }
-        (data).login // { login?: unknown }
-      );
+      login = data.login;
     }
 
     if (login?.result !== 'Success') {
@@ -164,9 +171,7 @@ class MediaWikiSession {
 
     data = await this._post({ action: 'query', meta: 'tokens', type: 'csrf' });
 
-    const q2 = ( // { tokens?: { csrftoken?: string } }
-      (data).query // { query?: unknown }
-    );
+    const q2 = data.query;
 
     this.csrf_token = q2?.tokens?.csrftoken ?? null;
 
@@ -175,34 +180,22 @@ class MediaWikiSession {
     }
   }
 
-  /**
-   * @param {string} title
-   */
-  async page_exists(title) {
+  async page_exists(title: string): Promise<boolean> {
     const data = await this._post({ action: 'query', titles: title });
-    const query = ( // { pages?: Record<string, { missing?: boolean }> } | undefined
-      data.query
-    );
+    const query = data.query;
     const pages = query?.pages;
     if (!pages) return false;
     const page = Object.values(pages)[0];
     return Boolean(page && !page.missing);
   }
 
-  /**
-   * @param {string} title
-   * @param {string} text
-   * @param {string} summary
-   * @param {string} content_model
-   */
-  async edit(title, text, summary, content_model) {
+  async edit(title: string, text: string, summary: string, content_model: string): Promise<void> {
     if (!this.csrf_token) {
       throw new Error('WikiWire: not logged in (missing CSRF token)');
-    };
+    }
 
     const exists = await this.page_exists(title);
-    // Record<string, string>
-    const params = {
+    const params: Record<string, string> = {
       action: 'edit',
       title,
       text,
@@ -213,23 +206,19 @@ class MediaWikiSession {
 
     if (!exists) {
       params.contentmodel = content_model;
-    };
+    }
 
     const data = await this._post(params);
 
     if (data.error) {
-      const err = (data.error); // { code?: string, info?: string }
+      const err = data.error;
       throw new Error(`WikiWire: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`);
-    };
+    }
 
-    const edit = ( // { result?: string }
-      (data).edit // { edit?: unknown }
-    );
+    const edit = data.edit;
 
     if (!edit || edit.result !== 'Success') {
       throw new Error(`WikiWire: edit ${title}: unexpected response ${JSON.stringify(data)}`);
-    };
+    }
   }
 }
-
-module.exports = { MediaWikiSession };

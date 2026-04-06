@@ -1,35 +1,55 @@
-const fs = require('node:fs');
-const TOML = require('@iarna/toml');
+import fs from 'node:fs';
+import TOML from '@iarna/toml';
 
-/**
- * @typedef {{ id: string, api: string, dry_run: boolean, default_branch: string | null, css_content_model: string }} SiteConfig
- */
+export type SiteConfig = {
+  id: string;
+  api: string;
+  dry_run: boolean;
+  default_branch: string | null;
+  css_content_model: string;
+};
 
-/**
- * @param {string} config_path
- * @returns {{ version: number, shared: boolean, sites: Map<string, SiteConfig>, path_to_site: Map<string, SiteConfig> }}
- */
-function load_config(config_path) {
+type TomlSiteEntry = {
+  id?: unknown;
+  api?: unknown;
+  dry_run?: unknown;
+  default_branch?: unknown;
+  css_content_model?: unknown;
+  host?: unknown;
+};
+
+type TomlRoot = {
+  version?: unknown;
+  shared?: unknown;
+  sites?: unknown;
+};
+
+export function load_config(config_path: string): {
+  version: number;
+  shared: boolean;
+  sites: Map<string, SiteConfig>;
+  path_to_site: Map<string, SiteConfig>;
+} {
   const raw = fs.readFileSync(config_path, 'utf8');
-  const data = (TOML.parse(raw)); // Record<string, unknown>
+  const data = TOML.parse(raw) as TomlRoot;
 
   if (!Array.isArray(data.sites)) {
     throw new Error('WikiWire: wikiwire.toml must contain [[sites]] entries');
-  };
+  }
 
   const shared = Boolean(data.shared);
 
-  const sites = new Map(); // Map<string, SiteConfig>
-  const path_to_site = new Map(); // Map<string, SiteConfig>
+  const sites = new Map<string, SiteConfig>();
+  const path_to_site = new Map<string, SiteConfig>();
 
   for (const entry of data.sites) {
-    const s = (entry); // Record<string, unknown>
+    const s = entry as TomlSiteEntry;
 
     if (typeof s.id !== 'string' || typeof s.api !== 'string') {
       throw new Error('WikiWire: each site needs string id and api');
-    };
+    }
 
-    const site_cfg = {
+    const site_cfg: SiteConfig = {
       id: s.id,
       api: s.api.trim(),
       dry_run: Boolean(s.dry_run),
@@ -64,11 +84,11 @@ function load_config(config_path) {
 
     sites.set(site_cfg.id, site_cfg);
     path_to_site.set(path_segment, site_cfg);
-  };
+  }
 
   if (sites.size === 0) {
     throw new Error('WikiWire: wikiwire.toml must define at least one [[sites]] entry');
-  };
+  }
 
   return {
     version: typeof data.version === 'number' ? data.version : 1,
@@ -77,5 +97,3 @@ function load_config(config_path) {
     path_to_site,
   };
 }
-
-module.exports = { load_config };

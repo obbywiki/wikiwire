@@ -1,42 +1,42 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-const fs = require('node:fs');
-const path = require('node:path');
-const ignore = require('ignore');
-const { load_config } = require('./config');
-const { map_repo_path } = require('./paths');
-const { MediaWikiSession } = require('./mediawiki');
-const { parse_site_credentials } = require('./site_credentials');
+import fs from 'node:fs';
+import path from 'node:path';
+import ignore from 'ignore';
+import type { Ignore } from 'ignore';
+import { load_config, type SiteConfig } from './config';
+import { map_repo_path, type MappedPath } from './paths';
+import { MediaWikiSession } from './mediawiki';
+import { parse_site_credentials } from './site_credentials';
 
-/**
- * @param {string | undefined} sha
- */
-function is_zero_sha(sha) {
+type Push_payload = { after?: string; before?: string };
+
+function is_zero_sha(sha: string | undefined): boolean {
   return !sha || /^0+$/.test(sha);
 }
 
-/**
- * @param {string} dir
- * @param {string} workspace
- * @param {string[]} out
- */
-function walk_files(dir, workspace, out) {
+function walk_files(dir: string, workspace: string, out: string[]): void {
   if (!fs.existsSync(dir)) return;
 
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, ent.name);
 
-    if (ent.isDirectory()) { walk_files(full, workspace, out) } else { out.push(path.relative(workspace, full).split(path.sep).join('/')) };
+    if (ent.isDirectory()) {
+      walk_files(full, workspace, out);
+    } else {
+      out.push(path.relative(workspace, full).split(path.sep).join('/'));
+    }
   }
 }
 
-/**
- * @param {{ workspace: string, sync_all: boolean, ign: import('ignore').Ignore }} opts
- */
-async function list_changed_paths(opts) {
+async function list_changed_paths(opts: {
+  workspace: string;
+  sync_all: boolean;
+  ign: Ignore;
+}): Promise<string[]> {
   const { workspace, sync_all, ign } = opts;
   if (sync_all) {
-    const out = []; // string[]
+    const out: string[] = [];
 
     for (const root of ['modules', 'templates']) {
       walk_files(path.join(workspace, root), workspace, out);
@@ -45,25 +45,23 @@ async function list_changed_paths(opts) {
     return out.filter((f) => !ign.ignores(f));
   }
 
-
   const token = process.env.GITHUB_TOKEN;
 
   if (!token) {
     throw new Error('WikiWire: GITHUB_TOKEN is required when sync_all is false');
   }
 
-
   const octokit = github.getOctokit(token);
   const { owner, repo } = github.context.repo;
-  const payload = github.context.payload;
-  const after = (payload).after ?? github.context.sha; // { after?: string }
-  const before = (payload).before ?? ''; // { before?: string }
+  const payload = github.context.payload as Push_payload;
+  const after = payload.after ?? github.context.sha;
+  const before = payload.before ?? '';
 
-  let filenames = []; // string[]
+  let filenames: string[] = [];
 
   if (is_zero_sha(before)) {
     const { data } = await octokit.rest.repos.getCommit({ owner, repo, ref: after });
-    filenames = (data.files ?? []).map((f) => f.filename).filter(Boolean);
+    filenames = (data.files ?? []).map((f) => f.filename).filter(Boolean) as string[];
   } else {
     const { data } = await octokit.rest.repos.compareCommits({
       owner,
@@ -74,13 +72,19 @@ async function list_changed_paths(opts) {
     filenames = (data.files ?? [])
       .filter((f) => f.status !== 'removed')
       .map((f) => f.filename)
-      .filter(Boolean);
+      .filter(Boolean) as string[];
   }
 
   return filenames.filter((f) => !ign.ignores(f));
 }
 
-async function run() {
+type Sync_job = {
+  file: string;
+  mapped: MappedPath;
+  site_cfg: SiteConfig;
+};
+
+async function run(): Promise<void> {
   const default_username = core.getInput('username');
   const default_password = core.getInput('password');
   const site_creds_map = parse_site_credentials(core.getInput('site_credentials') || '');
@@ -97,7 +101,7 @@ async function run() {
 
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
   const full_config = path.join(workspace, config_path);
-  
+
   if (!fs.existsSync(full_config)) {
     throw new Error(`WikiWire: config not found: ${full_config}`);
   }
@@ -112,8 +116,7 @@ async function run() {
     }
   }
 
-  /** @type {import('ignore').Ignore} */
-  let ign = ignore();
+  let ign: Ignore = ignore();
   const full_ignore = path.join(workspace, ignore_path);
   if (fs.existsSync(full_ignore)) {
     ign = ign.add(fs.readFileSync(full_ignore, 'utf8'));
@@ -121,8 +124,7 @@ async function run() {
 
   const changed = await list_changed_paths({ workspace, sync_all, ign });
 
-  /** @type {{ file: string, mapped: { is_shared: boolean, title: string, content_model: string, kind: string }, site_cfg: { id: string, api: string, dry_run: boolean, default_branch: string | null, css_content_model: string } }[]} */
-  const jobs = [];
+  const jobs: Sync_job[] = [];
 
   for (const file of changed) {
     if (!file.startsWith('modules/') && !file.startsWith('templates/')) continue;
@@ -201,10 +203,7 @@ async function run() {
     return;
   }
 
-  /**
-   * @param {string} site_id
-   */
-  function credentials_for_site(site_id) {
+  function credentials_for_site(site_id: string) {
     const per_site = site_creds_map.get(site_id);
     if (per_site) return per_site;
     return {
@@ -213,7 +212,7 @@ async function run() {
     };
   }
 
-  const sites_needing_auth = new Set();
+  const sites_needing_auth = new Set<string>();
   for (const job of jobs) {
     if (input_dry || job.site_cfg.dry_run) continue;
     sites_needing_auth.add(job.site_cfg.id);
@@ -228,12 +227,9 @@ async function run() {
     }
   }
 
-  const sessions = new Map(); // Map<string, MediaWikiSession>
+  const sessions = new Map<string, MediaWikiSession>();
 
-  /**
-   * @param {string} site_id
-   */
-  async function get_session(site_id) {
+  async function get_session(site_id: string): Promise<MediaWikiSession> {
     const existing = sessions.get(site_id);
 
     if (existing) return existing;
@@ -274,6 +270,6 @@ async function run() {
   }
 }
 
-run().catch((err) => {
+run().catch((err: unknown) => {
   core.setFailed(err instanceof Error ? err.message : String(err));
 });
