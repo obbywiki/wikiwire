@@ -8,6 +8,10 @@
     "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --format=cjs --minify --legal-comments=none",
     "typecheck": "tsc --noEmit"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/obbywiki/wikiwire.git"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
