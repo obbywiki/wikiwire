@@ -82,6 +82,9 @@ Place at the repository root unless you override with the `config_path` action i
 Example:
 
 ```toml
+# This is a global WikiWire configuration file, a CI action which automatically syncs and uploads modules and templates from a Git repo towards a production or upstream MediaWiki instance via bot passwords and the MediaWiki Action API.
+# Learn more: https://github.com/obbywiki/wikiwire
+
 version = 1
 shared = true
 
@@ -133,9 +136,6 @@ Every site that performs a real (non–dry-run) sync must resolve to a username 
 ### Example workflow
 
 ```yaml
-# This is a global WikiWire configuration file, a CI action which automatically syncs and uploads modules and templates from a Git repo towards a production or upstream MediaWiki instance via bot passwords and the MediaWiki Action API.
-# Learn more: https://github.com/obbywiki/wikiwire
-
 name: WikiWire
 
 on:
