@@ -141,6 +141,11 @@ name: WikiWire
 on:
   push:
     branches: [main]
+    paths:
+      - 'modules/**'
+      - 'modules/*'
+      - 'templates/**'
+      - 'templates/*'
 
 jobs:
   wikiwire:
