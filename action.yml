@@ -34,7 +34,7 @@ inputs:
     required: false
     default: "false"
   dark_lua_compat:
-    description: If set to "true", allow uploading Luau modules (*.module.luau) as Scribunto. If empty, falls back to the wikiwire.toml site config. Note that this may be fragile.
+    description: Deprecated. Luau modules (*.module.luau) are always uploaded as Scribunto; this input is ignored (kept so existing workflows do not get unexpected-input warnings).
     required: false
     default: ""
 

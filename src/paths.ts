@@ -16,10 +16,9 @@ export type MappedPath = MappedShared | MappedSite;
 
 export function map_repo_path(
   relative_path: string,
-  options: { css_content_model?: string; allow_luau?: boolean } = {},
+  options: { css_content_model?: string } = {},
 ): MappedPath | null {
   const css_content_model = options.css_content_model ?? 'sanitized-css';
-  const allow_luau = Boolean(options.allow_luau);
   const normalized = relative_path.replace(/\\/g, '/').replace(/^\/+/, '');
   const parts = normalized.split('/').filter(Boolean);
   if (parts.length === 0) return null;
@@ -55,7 +54,6 @@ export function map_repo_path(
       };
     }
     if (rel_under_root === `${root_name}.module.luau`) {
-      if (!allow_luau) return null;
       return {
         is_shared,
         title: `Module:${root_name}`,
@@ -72,10 +70,7 @@ export function map_repo_path(
       };
     }
 
-    const content_model = content_model_for_module_subfile(rel_under_root, css_content_model, {
-      allow_luau,
-    });
-    if (!content_model) return null;
+    const content_model = content_model_for_module_subfile(rel_under_root, css_content_model);
     return {
       is_shared,
       title: `Module:${root_name}/${rel_under_root}`,
@@ -106,13 +101,10 @@ export function map_repo_path(
 export function content_model_for_module_subfile(
   rel_under_root: string,
   css_content_model: string,
-  options: { allow_luau?: boolean } = {},
-): string | null {
-  const allow_luau = Boolean(options.allow_luau);
+): string {
   if (rel_under_root.endsWith('.module.lua')) return 'scribunto';
 
   if (rel_under_root.endsWith('.module.luau')) {
-    if (!allow_luau) return null;
     return 'scribunto';
   }
   if (rel_under_root.endsWith('.wikitext')) return 'wikitext';

@@ -50,7 +50,7 @@ Suffix matching is ordered; the first match wins:
 |---------|----------------|
 | `*.template.wikitext` | (invalid under `modules/`; the action fails with a clear error) |
 | `*.module.lua` | `scribunto` |
-| `*.module.luau` | `scribunto` when `dark_lua_compat = true`; otherwise skipped |
+| `*.module.luau` | `scribunto` |
 | `*.wikitext` | `wikitext` |
 | `*.css` | Per-site `css_content_model` in `wikiwire.toml` (default `sanitized-css`) |
 | `*.json` | `json` |
@@ -68,7 +68,6 @@ Place at the repository root unless you override with the `config_path` action i
 |-----|------|----------|-------------|
 | `version` | integer | no | Config schema version; default `1`. Reserved for future use. |
 | `shared` | boolean | no | If true, enables `modules/shared/` and `templates/shared/`, synced to every `[[sites]]` entry. Default false. |
-| `dark_lua_compat` | boolean | no | If true, allow uploading Luau modules (`*.module.luau`) as Scribunto. Default false. Intended for workflows that run Darklua or otherwise manage Luau/Lua compatibility before upload. |
 
 ### `[[sites]]` (repeatable)
 
@@ -130,7 +129,7 @@ modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.template.wikitext
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits are sent (site-level `dry_run` in TOML still applies per site). |
 | `sync_all` | no | `false` | If `true`, sync every file under `modules/` and `templates/` from the workspace instead of using commit diffs. Requires a prior checkout of the repo. |
-| `dark_lua_compat` | no | `""` | If set to `"true"`/`"false"`, overrides `wikiwire.toml` `dark_lua_compat`. If empty, WikiWire uses the TOML value, although that may be fragile. |
+| `dark_lua_compat` | no | `""` | Deprecated; ignored. Kept so existing workflows are not flagged for an unknown input. Luau modules are always synced as Scribunto. |
 
 Use a workflow `permissions` block with at least `contents: read` so the default `GITHUB_TOKEN` can call the compare API.
 
@@ -180,7 +179,6 @@ Example (outline):
       - uses: obbywiki/wikiwire@latest
         with:
           sync_all: "true"
-          dark_lua_compat: "true"
           username: WikiWireBot@BotPasswordNameHere
           password: ${{ secrets.WIKI_PASSWORD }}
 ```
@@ -193,12 +191,12 @@ If you want to avoid `sync_all`, the files you intend to upload must exist in th
 - Generate sibling `*.module.lua` files with Darklua (and **commit** them)
 - Have WikiWire upload only the changed `*.module.lua` files (diff-based; no `sync_all`)
 
-In this setup, leave `dark_lua_compat` disabled so raw Luau sources are not uploaded.
+In this setup, add `*.module.luau` to `.wikiwireignore` if you want WikiWire to upload only the generated `*.module.lua` files and not the Luau sources.
 
 Example workflow (outline; assumes the `*.module.lua` outputs are committed alongside sources):
 
 ```yaml
-name: WikiWire (Darklua outputs, no sync_all)
+name: WikiWire (with Darklua)
 
 on:
   push:
@@ -216,8 +214,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install Darklua (pick your preferred installation method)
-      # - run: <install darklua>
+      - name: Install Darklua # (pick your preferred installation method) and make sure its up to date
+        run: |
+          wget https://github.com/seaofvoices/darklua/releases/download/v0.18.0/darklua-linux-x86_64.zip
+          unzip darklua-linux-x86_64.zip
+          chmod +x darklua
 
       - name: Regenerate Lua outputs for changed Luau modules
         shell: bash
@@ -232,7 +233,7 @@ jobs:
             mkdir -p "$(dirname "$out_path")"
 
             # Example CLI shape (adjust flags to your darklua config)
-            darklua process --config darklua.json "$path" -o "$out_path"
+            darklua process --config .darklua.json "$path" "$out_path"
           done <<< "$changed_files"
 
       - name: Fail if outputs were not committed
@@ -249,7 +250,6 @@ jobs:
       - uses: obbywiki/wikiwire@latest
         with:
           # default: sync_all: "false"
-          dark_lua_compat: "false"
           username: WikiWireBot@BotPasswordNameHere
           password: ${{ secrets.WIKI_PASSWORD }}
 ```

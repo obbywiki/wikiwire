@@ -21,14 +21,12 @@ type TOMLSiteEntry = {
 type TomlRoot = {
   version?: unknown;
   shared?: unknown;
-  dark_lua_compat?: unknown;
   sites?: unknown;
 };
 
 export function load_config(config_path: string): {
   version: number;
   shared: boolean;
-  dark_lua_compat: boolean;
   sites: Map<string, SiteConfig>;
   path_to_site: Map<string, SiteConfig>;
 } {
@@ -40,10 +38,6 @@ export function load_config(config_path: string): {
   }
 
   const shared = Boolean(data.shared);
-  if (data.dark_lua_compat !== undefined && typeof data.dark_lua_compat !== 'boolean') {
-    throw new Error('WikiWire: dark_lua_compat must be a boolean if set');
-  }
-  const dark_lua_compat = Boolean(data.dark_lua_compat);
 
   const sites = new Map<string, SiteConfig>();
   const path_to_site = new Map<string, SiteConfig>();
@@ -100,7 +94,6 @@ export function load_config(config_path: string): {
   return {
     version: typeof data.version === 'number' ? data.version : 1,
     shared,
-    dark_lua_compat,
     sites,
     path_to_site,
   };

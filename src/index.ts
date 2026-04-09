@@ -94,7 +94,6 @@ async function run(): Promise<void> {
   const ignore_path = core.getInput('ignore_path') || '.wikiwireignore';
   const input_dry = core.getInput('dry_run') === 'true';
   const sync_all = core.getInput('sync_all') === 'true';
-  const input_dark_lua_compat_raw = (core.getInput('dark_lua_compat') || '').trim();
 
   if (!sync_all && github.context.eventName !== 'push') {
     throw new Error(
@@ -109,21 +108,7 @@ async function run(): Promise<void> {
     throw new Error(`WikiWire: config not found: ${full_config}`);
   }
 
-  const {
-    sites,
-    shared: shared_enabled,
-    path_to_site,
-    dark_lua_compat: config_dark_lua_compat,
-  } = load_config(full_config);
-
-  let dark_lua_compat = config_dark_lua_compat;
-  if (input_dark_lua_compat_raw.length > 0) {
-    if (input_dark_lua_compat_raw !== 'true' && input_dark_lua_compat_raw !== 'false') {
-      throw new Error('WikiWire: dark_lua_compat input must be "true", "false", or empty');
-    }
-    
-    dark_lua_compat = input_dark_lua_compat_raw === 'true';
-  }
+  const { sites, shared: shared_enabled, path_to_site } = load_config(full_config);
 
   for (const cred_site_id of site_creds_map.keys()) {
     if (!sites.has(cred_site_id)) {
@@ -145,10 +130,6 @@ async function run(): Promise<void> {
 
   for (const file of changed) {
     if (!file.startsWith('modules/') && !file.startsWith('templates/')) continue;
-    if (!dark_lua_compat && file.endsWith('.module.luau')) {
-      core.info(`WikiWire: skip Luau module (dark_lua_compat is false) ${file}`);
-      continue;
-    }
 
     const parts = file.split('/').filter(Boolean);
     if (parts.some((p) => p.startsWith('_'))) {
@@ -183,7 +164,6 @@ async function run(): Promise<void> {
 
         const mapped = map_repo_path(file, {
           css_content_model: site_cfg.css_content_model,
-          allow_luau: dark_lua_compat,
         });
         if (!mapped) continue;
 
@@ -214,7 +194,6 @@ async function run(): Promise<void> {
 
     const mapped = map_repo_path(file, {
       css_content_model: site_cfg.css_content_model,
-      allow_luau: dark_lua_compat,
     });
     if (!mapped) continue;
 
