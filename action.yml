@@ -33,6 +33,10 @@ inputs:
     description: If true, sync all files under modules/ and templates/ from the workspace instead of commit diffs (use for workflow_dispatch or full sync)
     required: false
     default: "false"
+  dark_lua_compat:
+    description: If set to "true", allow uploading Luau modules (*.module.luau) as Scribunto. If empty, falls back to the wikiwire.toml site config. Note that this may be fragile.
+    required: false
+    default: ""
 
 runs:
   using: node20

@@ -16,9 +16,10 @@ export type MappedPath = MappedShared | MappedSite;
 
 export function map_repo_path(
   relative_path: string,
-  options: { css_content_model?: string } = {},
+  options: { css_content_model?: string; allow_luau?: boolean } = {},
 ): MappedPath | null {
   const css_content_model = options.css_content_model ?? 'sanitized-css';
+  const allow_luau = Boolean(options.allow_luau);
   const normalized = relative_path.replace(/\\/g, '/').replace(/^\/+/, '');
   const parts = normalized.split('/').filter(Boolean);
   if (parts.length === 0) return null;
@@ -53,6 +54,19 @@ export function map_repo_path(
         kind: 'module',
       };
     }
+    if (rel_under_root === `${root_name}.module.luau`) {
+      if (!allow_luau) {
+        throw new Error(
+          `WikiWire: ${relative_path}: .module.luau uploads are disabled (enable dark_lua_compat to allow Luau modules)`,
+        );
+      }
+      return {
+        is_shared,
+        title: `Module:${root_name}`,
+        content_model: 'scribunto',
+        kind: 'module',
+      };
+    }
     if (rel_under_root === 'doc.wikitext') {
       return {
         is_shared,
@@ -62,7 +76,9 @@ export function map_repo_path(
       };
     }
 
-    const content_model = content_model_for_module_subfile(rel_under_root, css_content_model);
+    const content_model = content_model_for_module_subfile(rel_under_root, css_content_model, {
+      allow_luau,
+    });
     return {
       is_shared,
       title: `Module:${root_name}/${rel_under_root}`,
@@ -93,13 +109,25 @@ export function map_repo_path(
 export function content_model_for_module_subfile(
   rel_under_root: string,
   css_content_model: string,
+  options: { allow_luau?: boolean } = {},
 ): string {
+  const allow_luau = Boolean(options.allow_luau);
   if (rel_under_root.endsWith('.module.lua')) return 'scribunto';
+  
+  if (rel_under_root.endsWith('.module.luau')) {
+    if (!allow_luau) {
+      throw new Error(
+        `WikiWire: ${rel_under_root}: .module.luau uploads are disabled (enable dark_lua_compat to allow Luau modules)`,
+      );
+    }
+
+    return 'scribunto';
+  }
   if (rel_under_root.endsWith('.wikitext')) return 'wikitext';
   if (rel_under_root.endsWith('.css')) return css_content_model;
   if (rel_under_root.endsWith('.json')) return 'json';
 
   throw new Error(
-    `WikiWire: unsupported module subfile extension: ${rel_under_root} (allowed: .module.lua, .wikitext, .css, .json)`,
+    `WikiWire: unsupported module subfile extension: ${rel_under_root} (allowed: .module.lua, .module.luau, .wikitext, .css, .json)`,
   );
 }

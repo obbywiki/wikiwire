@@ -61,7 +61,9 @@ async function list_changed_paths(opts: {
 
   if (is_zero_sha(before)) {
     const { data } = await octokit.rest.repos.getCommit({ owner, repo, ref: after });
-    filenames = (data.files ?? []).map((f) => f.filename).filter(Boolean) as string[];
+    filenames = (data.files ?? [])
+      .map((f: { filename?: string | null }) => f.filename)
+      .filter(Boolean) as string[];
   } else {
     const { data } = await octokit.rest.repos.compareCommits({
       owner,
@@ -70,8 +72,8 @@ async function list_changed_paths(opts: {
       head: after,
     });
     filenames = (data.files ?? [])
-      .filter((f) => f.status !== 'removed')
-      .map((f) => f.filename)
+      .filter((f: { status?: string | null }) => f.status !== 'removed')
+      .map((f: { filename?: string | null }) => f.filename)
       .filter(Boolean) as string[];
   }
 
@@ -92,6 +94,7 @@ async function run(): Promise<void> {
   const ignore_path = core.getInput('ignore_path') || '.wikiwireignore';
   const input_dry = core.getInput('dry_run') === 'true';
   const sync_all = core.getInput('sync_all') === 'true';
+  const input_dark_lua_compat_raw = (core.getInput('dark_lua_compat') || '').trim();
 
   if (!sync_all && github.context.eventName !== 'push') {
     throw new Error(
@@ -106,7 +109,21 @@ async function run(): Promise<void> {
     throw new Error(`WikiWire: config not found: ${full_config}`);
   }
 
-  const { sites, shared: shared_enabled, path_to_site } = load_config(full_config);
+  const {
+    sites,
+    shared: shared_enabled,
+    path_to_site,
+    dark_lua_compat: config_dark_lua_compat,
+  } = load_config(full_config);
+
+  let dark_lua_compat = config_dark_lua_compat;
+  if (input_dark_lua_compat_raw.length > 0) {
+    if (input_dark_lua_compat_raw !== 'true' && input_dark_lua_compat_raw !== 'false') {
+      throw new Error('WikiWire: dark_lua_compat input must be "true", "false", or empty');
+    }
+    
+    dark_lua_compat = input_dark_lua_compat_raw === 'true';
+  }
 
   for (const cred_site_id of site_creds_map.keys()) {
     if (!sites.has(cred_site_id)) {
@@ -162,6 +179,7 @@ async function run(): Promise<void> {
 
         const mapped = map_repo_path(file, {
           css_content_model: site_cfg.css_content_model,
+          allow_luau: dark_lua_compat,
         });
         if (!mapped) continue;
 
@@ -192,6 +210,7 @@ async function run(): Promise<void> {
 
     const mapped = map_repo_path(file, {
       css_content_model: site_cfg.css_content_model,
+      allow_luau: dark_lua_compat,
     });
     if (!mapped) continue;
 

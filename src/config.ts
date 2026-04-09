@@ -9,7 +9,7 @@ export type SiteConfig = {
   css_content_model: string;
 };
 
-type TomlSiteEntry = {
+type TOMLSiteEntry = {
   id?: unknown;
   api?: unknown;
   dry_run?: unknown;
@@ -21,12 +21,14 @@ type TomlSiteEntry = {
 type TomlRoot = {
   version?: unknown;
   shared?: unknown;
+  dark_lua_compat?: unknown;
   sites?: unknown;
 };
 
 export function load_config(config_path: string): {
   version: number;
   shared: boolean;
+  dark_lua_compat: boolean;
   sites: Map<string, SiteConfig>;
   path_to_site: Map<string, SiteConfig>;
 } {
@@ -38,12 +40,16 @@ export function load_config(config_path: string): {
   }
 
   const shared = Boolean(data.shared);
+  if (data.dark_lua_compat !== undefined && typeof data.dark_lua_compat !== 'boolean') {
+    throw new Error('WikiWire: dark_lua_compat must be a boolean if set');
+  }
+  const dark_lua_compat = Boolean(data.dark_lua_compat);
 
   const sites = new Map<string, SiteConfig>();
   const path_to_site = new Map<string, SiteConfig>();
 
   for (const entry of data.sites) {
-    const s = entry as TomlSiteEntry;
+    const s = entry as TOMLSiteEntry;
 
     if (typeof s.id !== 'string' || typeof s.api !== 'string') {
       throw new Error('WikiWire: each site needs string id and api');
@@ -63,6 +69,7 @@ export function load_config(config_path: string): {
       if (typeof s.host !== 'string') {
         throw new Error(`WikiWire: site "${s.id}" host must be a string if set`);
       }
+
       path_segment = s.host.trim();
       if (path_segment.length === 0) {
         throw new Error(`WikiWire: site "${s.id}" host must not be empty`);
@@ -93,6 +100,7 @@ export function load_config(config_path: string): {
   return {
     version: typeof data.version === 'number' ? data.version : 1,
     shared,
+    dark_lua_compat,
     sites,
     path_to_site,
   };

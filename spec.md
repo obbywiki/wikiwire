@@ -50,6 +50,7 @@ Suffix matching is ordered; the first match wins:
 |---------|----------------|
 | `*.template.wikitext` | (invalid under `modules/`; the action fails with a clear error) |
 | `*.module.lua` | `scribunto` |
+| `*.module.luau` | `scribunto` (requires `dark_lua_compat = true`) |
 | `*.wikitext` | `wikitext` |
 | `*.css` | Per-site `css_content_model` in `wikiwire.toml` (default `sanitized-css`) |
 | `*.json` | `json` |
@@ -67,6 +68,7 @@ Place at the repository root unless you override with the `config_path` action i
 |-----|------|----------|-------------|
 | `version` | integer | no | Config schema version; default `1`. Reserved for future use. |
 | `shared` | boolean | no | If true, enables `modules/shared/` and `templates/shared/`, synced to every `[[sites]]` entry. Default false. |
+| `dark_lua_compat` | boolean | no | If true, allow uploading Luau modules (`*.module.luau`) as Scribunto. Default false. Intended for workflows that run Darklua or otherwise manage Luau/Lua compatibility before upload. |
 
 ### `[[sites]]` (repeatable)
 
@@ -128,6 +130,7 @@ modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.template.wikitext
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits are sent (site-level `dry_run` in TOML still applies per site). |
 | `sync_all` | no | `false` | If `true`, sync every file under `modules/` and `templates/` from the workspace instead of using commit diffs. Requires a prior checkout of the repo. |
+| `dark_lua_compat` | no | `""` | If set to `"true"`/`"false"`, overrides `wikiwire.toml` `dark_lua_compat`. If empty, WikiWire uses the TOML value, although that may be fragile. |
 
 Use a workflow `permissions` block with at least `contents: read` so the default `GITHUB_TOKEN` can call the compare API.
 
@@ -155,8 +158,29 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: obbywiki/wikiwire@v1
+      - uses: obbywiki/wikiwire@latest
         with:
+          username: WikiWireBot@BotPasswordNameHere
+          password: ${{ secrets.WIKI_PASSWORD }}
+```
+
+## Darklua in CI (pre-upload)
+
+WikiWire uploads whatever is in the checked-out workspace under `modules/` and `templates/`. If you generate or transform Lua/Luau in CI (for example with Darklua), run that step **before** WikiWire.
+
+If the transformed files are generated during the workflow (not present in the push diff), use `sync_all: "true"` so WikiWire uploads from the filesystem instead of the GitHub compare API.
+
+Example (outline):
+
+```yaml
+    steps:
+      - uses: actions/checkout@v4
+      # install your tooling (darklua, compiler, etc.)
+      # run darklua so modules/** contains the final output
+      - uses: obbywiki/wikiwire@latest
+        with:
+          sync_all: "true"
+          dark_lua_compat: "true"
           username: WikiWireBot@BotPasswordNameHere
           password: ${{ secrets.WIKI_PASSWORD }}
 ```
@@ -166,7 +190,7 @@ jobs:
 Use `site_credentials` with one JSON object. Interpolate secrets per field, or store the entire JSON in a single secret and pass `site_credentials: ${{ secrets.WIKIWIRE_SITE_CREDENTIALS_JSON }}`.
 
 ```yaml
-      - uses: obbywiki/wikiwire@v1
+      - uses: obbywiki/wikiwire@latest
         with:
           site_credentials: |
             {
