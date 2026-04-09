@@ -2,16 +2,16 @@
 
 WikiWire is a GitHub Action that syncs changed files under `modules/` and `templates/` to a MediaWiki site via the [Action API](https://www.mediawiki.org/wiki/API:Action_API). Credentials are supplied only through the action inputs (or workflow secrets), never through the config file.
 
-## Repository layout
+## Recommended repository layout
 
 Wiki content lives under a **path segment** (second directory under `modules/` or `templates/`):
 
 - **Modules:** `modules/<path_segment>/<root_name>/…`
 - **Templates:** `templates/<path_segment>/<root_name>/…`
 
-For a normal site, `<path_segment>` is the site’s `id` in `wikiwire.toml`, or its optional `host` value if set (see configuration). That keeps a stable `id` in config while the repo folder can stay a hostname.
+Ideally `<path_segment>` is the site’s `host` in `wikiwire.toml`, but can also be its `id` value, if no `host` is set. Using the `host` value instead removes any ambiguity. That keeps a stable `id` in config while the repo folder can stay a hostname.
 
-**Shared bucket (optional):** If `shared = true` in `wikiwire.toml`, `modules/shared/` and `templates/shared/` are synced to **every** configured site. Wiki titles are the same as for a single site (the `shared` segment is not part of the title). When `shared` is false, paths under `modules/shared/` or `templates/shared/` cause the action to fail with a clear error.
+**Shared bucket (optional):** If `shared = true` in `wikiwire.toml`, `modules/shared/` and `templates/shared/` are synced to **every** configured site. Wiki titles are the same as for a single site (the `shared` segment is not part of the title). When `shared` is false, paths under `modules/shared/` or `templates/shared/` cause the action to fail with a clear error. If you want to name a subfolder shared but don't want to use the first-party WikiWire support, name the folder `_shared` instead.
 
 Example:
 
@@ -24,12 +24,14 @@ templates/obbywiki.com/Infobox/Infobox.template.wikitext
 modules/shared/CommonUtil/CommonUtil.module.lua
 ```
 
-- `<path_segment>` must match a site’s `id` or `host`, or be the literal `shared` when `shared = true`.
+You can see and use our live repository at https://github.com/obbywiki/modules.
+
+- `<path_segment>` must match a site’s `id` or `host`, or be the literal `shared` (when `shared = true`).
 - `<root_name>` is the module or template root (e.g. `GroupLink`). For the main module file and template file, the basename in the filename must match `<root_name>`.
 
 ### Paths skipped automatically
 
-Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/…`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/…`.
+Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
 
 ## Path to wiki title mapping
 
@@ -42,13 +44,15 @@ Any path under `modules/` or `templates/` that contains a **path component start
 
 Any other file under `modules/<path_segment>/<root>/` maps 1:1: the wiki subpage path is exactly the relative path under `<root>/`, including nested directories (for example `i18n/en.json` becomes `Module:GroupLink/i18n/en.json`).
 
+Templates synced to `Template:` must live under `templates/`, not `modules/`. You can still use regular wikitext files regardless
+
 ### Content models (non-special files under `modules/`)
 
 Suffix matching is ordered; the first match wins:
 
 | Pattern | Content model |
 |---------|----------------|
-| `*.template.wikitext` | (invalid under `modules/`; the action fails with a clear error) |
+| `*.template.wikitext` | (invalid under `modules/`; the action will fail) |
 | `*.module.lua` | `scribunto` |
 | `*.module.luau` | `scribunto` |
 | `*.wikitext` | `wikitext` |
@@ -56,11 +60,14 @@ Suffix matching is ordered; the first match wins:
 | `*.json` | `json` |
 | Anything else | Error: unsupported extension |
 
-Templates must live under `templates/`, not `modules/`.
+(**TODO**: these should be ignored instead, such as README.md)
+
 
 ## Configuration: `wikiwire.toml`
 
 Place at the repository root unless you override with the `config_path` action input.
+
+**Did you know?** [The Better GitHub File Icons extension](https://github.com/wlft/browser-extensions-GitHubBetterFileIcons) supports wikiwire files! Both `wikiwire.toml` and `.wikiwireignore` will use the wikiwire logo!
 
 ### Top-level
 
@@ -128,8 +135,8 @@ modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.template.wikitext
 | `config_path` | no | `wikiwire.toml` | Path to the TOML config. |
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits are sent (site-level `dry_run` in TOML still applies per site). |
-| `sync_all` | no | `false` | If `true`, sync every file under `modules/` and `templates/` from the workspace instead of using commit diffs. Requires a prior checkout of the repo. |
-| `dark_lua_compat` | no | `""` | Deprecated; ignored. Kept so existing workflows are not flagged for an unknown input. Luau modules are always synced as Scribunto. |
+| `sync_all` | no | `false` | If `true`, sync every file under `modules/` and `templates/` from the workspace instead of using commit diffs. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. |
+| `dark_lua_compat` | no | `""` | **Deprecated** and ignored. Luau modules are always synced as Scribunto. Add `**/*.module.luau` to your `.wikiwireignore` file instead. |
 
 Use a workflow `permissions` block with at least `contents: read` so the default `GITHUB_TOKEN` can call the compare API.
 
@@ -164,6 +171,8 @@ jobs:
 ```
 
 ## Darklua in CI (pre-upload)
+
+**DarkLua support is currently experimental and may be a bit finnicky.**
 
 WikiWire uploads whatever is in the checked-out workspace under `modules/` and `templates/`. If you generate or transform Lua/Luau in CI (for example with Darklua), run that step **before** WikiWire.
 
@@ -214,7 +223,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Darklua # (pick your preferred installation method) and make sure its up to date
+      - name: Install Darklua # (pick your preferred installation method) and make sure it's up to date
         run: |
           wget https://github.com/seaofvoices/darklua/releases/download/v0.18.0/darklua-linux-x86_64.zip
           unzip darklua-linux-x86_64.zip
