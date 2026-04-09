@@ -167,7 +167,9 @@ jobs:
 
 WikiWire uploads whatever is in the checked-out workspace under `modules/` and `templates/`. If you generate or transform Lua/Luau in CI (for example with Darklua), run that step **before** WikiWire.
 
-If the transformed files are generated during the workflow (not present in the push diff), use `sync_all: "true"` so WikiWire uploads from the filesystem instead of the GitHub compare API.
+For **push** syncs (default `sync_all: false`), when the GitHub diff includes a path `modules/**/*.module.luau`, WikiWire also adds the sibling `*.module.lua` path (same basename, `.module.lua` instead of `.module.luau`) if that file **exists in the workspace**. That covers CI that runs Darklua on changed Luau and writes `*.module.lua` without committing it—the Lua file does not have to appear in the commit diff. Put `**/*.module.luau` in `.wikiwireignore` if you want only the generated Lua synced to the wiki (both map to the same `Module:` title).
+
+Use `sync_all: "true"` when you need to upload from the whole tree (for example many generated files that are not tied to changed `*.module.luau` paths in the diff).
 
 Example (outline):
 
@@ -185,15 +187,13 @@ Example (outline):
 
 ### Darklua without `sync_all` (transpile only changed Luau modules)
 
-If you want to avoid `sync_all`, the files you intend to upload must exist in the **push diff** that WikiWire detects. A common pattern is to:
+You can avoid `sync_all` in two ways:
 
-- Keep Luau source files as `*.module.luau`
-- Generate sibling `*.module.lua` files with Darklua (and **commit** them)
-- Have WikiWire upload only the changed `*.module.lua` files (diff-based; no `sync_all`)
+1. **Commit generated Lua:** Keep `*.module.luau`, run Darklua, **commit** sibling `*.module.lua`. The diff usually lists both; add `**/*.module.luau` to `.wikiwireignore` if you want only the Lua file uploaded.
 
-In this setup, add `*.module.luau` to `.wikiwireignore` if you want WikiWire to upload only the generated `*.module.lua` files and not the Luau sources.
+2. **CI-only Lua:** In the same job, checkout → Darklua (so `*.module.lua` exists on disk) → WikiWire. The push diff need only include the changed `*.module.luau`; WikiWire adds the sibling `*.module.lua` path when that file exists in the workspace. Still use `.wikiwireignore` for `*.module.luau` so the wiki receives the Lua output, not the Luau source.
 
-Example workflow (outline; assumes the `*.module.lua` outputs are committed alongside sources):
+Example workflow (outline; first variant assumes `*.module.lua` outputs are **committed** alongside sources):
 
 ```yaml
 name: WikiWire (with Darklua)

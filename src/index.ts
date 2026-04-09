@@ -29,6 +29,32 @@ function walk_files(dir: string, workspace: string, out: string[]): void {
   }
 }
 
+/** When the push touches `*.module.luau`, also sync sibling `*.module.lua` if it exists (e.g. CI Darklua output). */
+function add_sibling_lua_paths(filenames: string[], workspace: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const f of filenames) {
+    if (!seen.has(f)) {
+      seen.add(f);
+      out.push(f);
+    }
+  }
+
+  for (const p of filenames) {
+    if (!p.startsWith('modules/') || !p.endsWith('.module.luau')) continue;
+
+    const sibling = p.replace(/\.module\.luau$/, '.module.lua');
+    if (!fs.existsSync(path.join(workspace, sibling))) continue;
+    if (!seen.has(sibling)) {
+      seen.add(sibling);
+      out.push(sibling);
+    }
+  }
+
+  return out;
+}
+
 async function list_changed_paths(opts: {
   workspace: string;
   sync_all: boolean;
@@ -76,6 +102,8 @@ async function list_changed_paths(opts: {
       .map((f: { filename?: string | null }) => f.filename)
       .filter(Boolean) as string[];
   }
+
+  filenames = add_sibling_lua_paths(filenames, workspace);
 
   return filenames.filter((f) => !ign.ignores(f));
 }
