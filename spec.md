@@ -50,7 +50,7 @@ Suffix matching is ordered; the first match wins:
 |---------|----------------|
 | `*.template.wikitext` | (invalid under `modules/`; the action fails with a clear error) |
 | `*.module.lua` | `scribunto` |
-| `*.module.luau` | `scribunto` (requires `dark_lua_compat = true`) |
+| `*.module.luau` | `scribunto` when `dark_lua_compat = true`; otherwise skipped |
 | `*.wikitext` | `wikitext` |
 | `*.css` | Per-site `css_content_model` in `wikiwire.toml` (default `sanitized-css`) |
 | `*.json` | `json` |
@@ -181,6 +181,75 @@ Example (outline):
         with:
           sync_all: "true"
           dark_lua_compat: "true"
+          username: WikiWireBot@BotPasswordNameHere
+          password: ${{ secrets.WIKI_PASSWORD }}
+```
+
+### Darklua without `sync_all` (transpile only changed Luau modules)
+
+If you want to avoid `sync_all`, the files you intend to upload must exist in the **push diff** that WikiWire detects. A common pattern is to:
+
+- Keep Luau source files as `*.module.luau`
+- Generate sibling `*.module.lua` files with Darklua (and **commit** them)
+- Have WikiWire upload only the changed `*.module.lua` files (diff-based; no `sync_all`)
+
+In this setup, leave `dark_lua_compat` disabled so raw Luau sources are not uploaded.
+
+Example workflow (outline; assumes the `*.module.lua` outputs are committed alongside sources):
+
+```yaml
+name: WikiWire (Darklua outputs, no sync_all)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'modules/**'
+      - 'templates/**'
+
+jobs:
+  darklua_check:
+    name: Verify Darklua outputs are up-to-date
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install Darklua (pick your preferred installation method)
+      # - run: <install darklua>
+
+      - name: Regenerate Lua outputs for changed Luau modules
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          changed_files="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")"
+          while IFS= read -r path; do
+            [[ "$path" == modules/**/*.module.luau ]] || continue
+
+            out_path="${path%.module.luau}.module.lua"
+            mkdir -p "$(dirname "$out_path")"
+
+            # Example CLI shape (adjust flags to your darklua config)
+            darklua process --config darklua.json "$path" -o "$out_path"
+          done <<< "$changed_files"
+
+      - name: Fail if outputs were not committed
+        run: git diff --exit-code
+
+  wikiwire:
+    name: Sync files to upstream MediaWiki
+    runs-on: ubuntu-latest
+    needs: [darklua_check]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: obbywiki/wikiwire@latest
+        with:
+          # default: sync_all: "false"
+          dark_lua_compat: "false"
           username: WikiWireBot@BotPasswordNameHere
           password: ${{ secrets.WIKI_PASSWORD }}
 ```

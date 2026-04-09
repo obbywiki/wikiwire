@@ -145,6 +145,10 @@ async function run(): Promise<void> {
 
   for (const file of changed) {
     if (!file.startsWith('modules/') && !file.startsWith('templates/')) continue;
+    if (!dark_lua_compat && file.endsWith('.module.luau')) {
+      core.info(`WikiWire: skip Luau module (dark_lua_compat is false) ${file}`);
+      continue;
+    }
 
     const parts = file.split('/').filter(Boolean);
     if (parts.some((p) => p.startsWith('_'))) {

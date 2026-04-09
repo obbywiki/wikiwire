@@ -55,11 +55,7 @@ export function map_repo_path(
       };
     }
     if (rel_under_root === `${root_name}.module.luau`) {
-      if (!allow_luau) {
-        throw new Error(
-          `WikiWire: ${relative_path}: .module.luau uploads are disabled (enable dark_lua_compat to allow Luau modules)`,
-        );
-      }
+      if (!allow_luau) return null;
       return {
         is_shared,
         title: `Module:${root_name}`,
@@ -79,6 +75,7 @@ export function map_repo_path(
     const content_model = content_model_for_module_subfile(rel_under_root, css_content_model, {
       allow_luau,
     });
+    if (!content_model) return null;
     return {
       is_shared,
       title: `Module:${root_name}/${rel_under_root}`,
@@ -110,17 +107,12 @@ export function content_model_for_module_subfile(
   rel_under_root: string,
   css_content_model: string,
   options: { allow_luau?: boolean } = {},
-): string {
+): string | null {
   const allow_luau = Boolean(options.allow_luau);
   if (rel_under_root.endsWith('.module.lua')) return 'scribunto';
-  
-  if (rel_under_root.endsWith('.module.luau')) {
-    if (!allow_luau) {
-      throw new Error(
-        `WikiWire: ${rel_under_root}: .module.luau uploads are disabled (enable dark_lua_compat to allow Luau modules)`,
-      );
-    }
 
+  if (rel_under_root.endsWith('.module.luau')) {
+    if (!allow_luau) return null;
     return 'scribunto';
   }
   if (rel_under_root.endsWith('.wikitext')) return 'wikitext';
