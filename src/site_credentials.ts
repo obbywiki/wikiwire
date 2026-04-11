@@ -1,6 +1,6 @@
-export type SiteCredentials = { username: string; password: string };
+export type site_credentials = { username: string; password: string };
 
-export function parse_site_credentials(raw: string): Map<string, SiteCredentials> {
+export function parse_site_credentials(raw: string): Map<string, site_credentials> {
   const trimmed = raw.trim();
 
   if (!trimmed) return new Map();
@@ -18,7 +18,7 @@ export function parse_site_credentials(raw: string): Map<string, SiteCredentials
     throw new Error('WikiWire: site_credentials JSON must be a non-null object');
   }
 
-  const out = new Map<string, SiteCredentials>();
+  const out = new Map<string, site_credentials>();
 
   for (const [site_id, value] of Object.entries(parsed as Record<string, unknown>)) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {

@@ -3,13 +3,15 @@ import * as github from '@actions/github';
 import fs from 'node:fs';
 import path from 'node:path';
 import ignore from 'ignore';
-import type { Ignore } from 'ignore';
-import { load_config, type SiteConfig } from './config';
-import { map_repo_path, type MappedPath } from './paths';
+
+import { load_config, type site_config } from './config';
+import { map_repo_path, type mapped_path } from './paths';
 import { MediaWikiSession } from './mediawiki';
 import { parse_site_credentials } from './site_credentials';
 
-type Push_payload = { after?: string; before?: string };
+import type { Ignore } from 'ignore';
+
+type push_payload = { after?: string; before?: string };
 
 function is_zero_sha(sha: string | undefined): boolean {
   return !sha || /^0+$/.test(sha);
@@ -29,7 +31,7 @@ function walk_files(dir: string, workspace: string, out: string[]): void {
   }
 }
 
-/** When the push touches `*.module.luau`, also sync sibling `*.module.lua` if it exists (e.g. CI Darklua output). */
+/** sync sibling paths if they exist. typically for generated output, as if Example.module.luau was the original file, and the Example.module.lua was the transpiled/generated file. */
 function add_sibling_lua_paths(filenames: string[], workspace: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -46,6 +48,7 @@ function add_sibling_lua_paths(filenames: string[], workspace: string): string[]
 
     const sibling = p.replace(/\.module\.luau$/, '.module.lua');
     if (!fs.existsSync(path.join(workspace, sibling))) continue;
+
     if (!seen.has(sibling)) {
       seen.add(sibling);
       out.push(sibling);
@@ -79,7 +82,7 @@ async function list_changed_paths(opts: {
 
   const octokit = github.getOctokit(token);
   const { owner, repo } = github.context.repo;
-  const payload = github.context.payload as Push_payload;
+  const payload = github.context.payload as push_payload;
   const after = payload.after ?? github.context.sha;
   const before = payload.before ?? '';
 
@@ -108,10 +111,10 @@ async function list_changed_paths(opts: {
   return filenames.filter((f) => !ign.ignores(f));
 }
 
-type Sync_job = {
+type sync_job = {
   file: string;
-  mapped: MappedPath;
-  site_cfg: SiteConfig;
+  mapped: mapped_path;
+  site_cfg: site_config;
 };
 
 async function run(): Promise<void> {
@@ -148,13 +151,14 @@ async function run(): Promise<void> {
 
   let ign: Ignore = ignore();
   const full_ignore = path.join(workspace, ignore_path);
+  
   if (fs.existsSync(full_ignore)) {
     ign = ign.add(fs.readFileSync(full_ignore, 'utf8'));
   }
 
   const changed = await list_changed_paths({ workspace, sync_all, ign });
 
-  const jobs: Sync_job[] = [];
+  const jobs: sync_job[] = [];
 
   for (const file of changed) {
     if (!file.startsWith('modules/') && !file.startsWith('templates/')) continue;

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import TOML from '@iarna/toml';
 
-export type SiteConfig = {
+export type site_config = {
   id: string;
   api: string;
   dry_run: boolean;
@@ -9,7 +9,7 @@ export type SiteConfig = {
   css_content_model: string;
 };
 
-type TOMLSiteEntry = {
+type toml_site_entry = {
   id?: unknown;
   api?: unknown;
   dry_run?: unknown;
@@ -18,7 +18,7 @@ type TOMLSiteEntry = {
   host?: unknown;
 };
 
-type TomlRoot = {
+type toml_root = {
   version?: unknown;
   shared?: unknown;
   sites?: unknown;
@@ -27,11 +27,11 @@ type TomlRoot = {
 export function load_config(config_path: string): {
   version: number;
   shared: boolean;
-  sites: Map<string, SiteConfig>;
-  path_to_site: Map<string, SiteConfig>;
+  sites: Map<string, site_config>;
+  path_to_site: Map<string, site_config>;
 } {
   const raw = fs.readFileSync(config_path, 'utf8');
-  const data = TOML.parse(raw) as TomlRoot;
+  const data = TOML.parse(raw) as toml_root;
 
   if (!Array.isArray(data.sites)) {
     throw new Error('WikiWire: wikiwire.toml must contain [[sites]] entries');
@@ -39,17 +39,17 @@ export function load_config(config_path: string): {
 
   const shared = Boolean(data.shared);
 
-  const sites = new Map<string, SiteConfig>();
-  const path_to_site = new Map<string, SiteConfig>();
+  const sites = new Map<string, site_config>();
+  const path_to_site = new Map<string, site_config>();
 
   for (const entry of data.sites) {
-    const s = entry as TOMLSiteEntry;
+    const s = entry as toml_site_entry;
 
     if (typeof s.id !== 'string' || typeof s.api !== 'string') {
       throw new Error('WikiWire: each site needs string id and api');
     }
 
-    const site_cfg: SiteConfig = {
+    const site_cfg: site_config = {
       id: s.id,
       api: s.api.trim(),
       dry_run: Boolean(s.dry_run),

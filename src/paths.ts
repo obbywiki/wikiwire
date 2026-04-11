@@ -1,23 +1,23 @@
-export type MappedShared = {
+export type mapped_shared = {
   is_shared: true;
   title: string;
   content_model: string;
   kind: 'module' | 'template';
 };
 
-export type MappedSite = {
+export type mapped_site = {
   is_shared: false;
   title: string;
   content_model: string;
   kind: 'module' | 'template';
 };
 
-export type MappedPath = MappedShared | MappedSite;
+export type mapped_path = mapped_shared | mapped_site;
 
 export function map_repo_path(
   relative_path: string,
   options: { css_content_model?: string } = {},
-): MappedPath | null {
+): mapped_path | null {
   const css_content_model = options.css_content_model ?? 'sanitized-css';
   const normalized = relative_path.replace(/\\/g, '/').replace(/^\/+/, '');
   const parts = normalized.split('/').filter(Boolean);
@@ -107,6 +107,7 @@ export function content_model_for_module_subfile(
   if (rel_under_root.endsWith('.module.luau')) {
     return 'scribunto';
   }
+  
   if (rel_under_root.endsWith('.wikitext')) return 'wikitext';
   if (rel_under_root.endsWith('.css')) return css_content_model;
   if (rel_under_root.endsWith('.json')) return 'json';
