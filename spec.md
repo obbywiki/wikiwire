@@ -123,7 +123,12 @@ Example:
 # Legacy copies kept in git only
 modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.module.lua
 modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.template.wikitext
+# It is recommended to include any file you don't want WikiWire to sync.
+**/*README.md
+**/*requirements.txt
 ```
+
+Please note that WikiWire is currently a BETA and this shouldn't be required in the future. Be advised that WikiWire doesn't support markdown or txt files, so syncing them will likely result in an error with-in your CI.
 
 ## GitHub Action inputs
 
