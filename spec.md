@@ -123,7 +123,7 @@ Example:
 # Legacy copies kept in git only
 modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.module.lua
 modules/obbywiki.com/ObbyGameInfobox/ObbyGameInfoboxLegacy.template.wikitext
-# It is recommended to include any file you don't want WikiWire to sync.
+# It is recommended to include any file you don't want WikiWire to sync
 **/*README.md
 **/*requirements.txt
 ```
@@ -303,6 +303,6 @@ You can combine global `username` / `password` with `site_credentials`: only sit
 - **Initial push:** When GitHub sends an all-zero `before` SHA, the action uses the single `push` head commit’s file list instead of `compareCommits`.
 - **Branches:** Use per-site `default_branch` or workflow `on.push.branches` to avoid syncing from unintended branches.
 
-## Releases
+## Releases/Builds
 
 After changing `src/`, run `pnpm install` and `pnpm build` so `dist/index.js` is updated before tagging a release consumers pin to.
