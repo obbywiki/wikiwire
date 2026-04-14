@@ -21,6 +21,8 @@ modules/obbywiki.com/GroupLink/doc.wikitext
 modules/obbywiki.com/GroupLink/styles.css
 modules/obbywiki.com/GroupLink/i18n/en.json
 templates/obbywiki.com/Infobox/Infobox.template.wikitext
+templates/obbywiki.com/MonthNav/MonthNav.template.wikitext
+templates/obbywiki.com/MonthNav/styles.css
 modules/shared/CommonUtil/CommonUtil.module.lua
 ```
 
@@ -41,10 +43,14 @@ Any path under `modules/` or `templates/` that contains a **path component start
 | `modules` | `modules/<path_segment>/<root>/doc.wikitext` | `Module:<root>/doc` | `wikitext` |
 | `modules` | `modules/<path_segment>/<root>/<any other path>` | `Module:<root>/<any other path>` | See below |
 | `templates` | `templates/<path_segment>/<root>/<root>.template.wikitext` | `Template:<root>` | `wikitext` |
+| `templates` | `templates/<path_segment>/<root>/doc.wikitext` | `Template:<root>/doc` | `wikitext` |
+| `templates` | `templates/<path_segment>/<root>/<any other path>` | `Template:<root>/<any other path>` | See below |
 
 Any other file under `modules/<path_segment>/<root>/` maps 1:1: the wiki subpage path is exactly the relative path under `<root>/`, including nested directories (for example `i18n/en.json` becomes `Module:GroupLink/i18n/en.json`).
 
-Templates synced to `Template:` must live under `templates/`, not `modules/`. You can still use regular wikitext files regardless
+The same 1:1 rule applies under `templates/<path_segment>/<root>/` for every path except the main `<root>.template.wikitext` (which maps to the bare `Template:<root>`) and `doc.wikitext` (which maps to `Template:<root>/doc`). For example `styles.css` becomes `Template:MonthNav/styles.css`.
+
+Templates synced to `Template:` must live under `templates/`, not `modules/`. You can still use regular wikitext files under a template root like any other subpath.
 
 ### Content models (non-special files under `modules/`)
 
@@ -61,6 +67,21 @@ Suffix matching is ordered; the first match wins:
 | Anything else | Error: unsupported extension |
 
 (**TODO**: these should be ignored instead, such as README.md)
+
+### Content models (non-special files under `templates/`)
+
+Suffix matching uses the same order as under `modules/`, with one restriction: `*.module.lua` and `*.module.luau` are invalid under `templates/` (Scribunto modules must live under `modules/`). The main page must be `<root>.template.wikitext` at `templates/<path_segment>/<root>/<root>.template.wikitext`.
+
+| Pattern | Content model |
+|---------|---------------|
+| `*.module.lua` | (invalid under `templates/`; the action will fail) |
+| `*.module.luau` | (invalid under `templates/`; the action will fail) |
+| `*.wikitext` | `wikitext` |
+| `*.css` | Per-site `css_content_model` in `wikiwire.toml` (default `sanitized-css`) |
+| `*.json` | `json` |
+| Anything else | Error: unsupported extension |
+
+Some wikis may reject certain content models on `Template:` subpages; in that case the Action API returns an error, similar to unusual `Module:` subpages.
 
 
 ## Configuration: `wikiwire.toml`
@@ -85,7 +106,7 @@ Place at the repository root unless you override with the `config_path` action i
 | `api` | string | yes | Full MediaWiki API URL, e.g. `https://example.org/w/api.php`. |
 | `dry_run` | boolean | no | If true, only log planned edits; no `action=edit` requests for this site. |
 | `default_branch` | string | no | If set, the action skips syncing when the workflow ref is not this branch (e.g. `refs/heads/main`). |
-| `css_content_model` | string | no | Content model for `*.css` module subpages. Default `sanitized-css`. Some wikis need `css`. |
+| `css_content_model` | string | no | Content model for `*.css` files under `modules/` and `templates/`. Default `sanitized-css`. Some wikis need `css`. |
 
 Example:
 

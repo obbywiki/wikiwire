@@ -70,7 +70,9 @@ export function map_repo_path(
       };
     }
 
-    const content_model = content_model_for_module_subfile(rel_under_root, css_content_model);
+    const content_model = content_model_for_repo_subfile(rel_under_root, css_content_model, {
+      allow_scribunto: true,
+    });
     return {
       is_shared,
       title: `Module:${root_name}/${rel_under_root}`,
@@ -79,40 +81,64 @@ export function map_repo_path(
     };
   }
 
-  if (rest.length !== 1) {
-    throw new Error(
-      `WikiWire: template path must be templates/<path_segment>/<name>/<name>.template.wikitext: ${relative_path}`,
-    );
+  if (rel_under_root === `${root_name}.template.wikitext`) {
+    return {
+      is_shared,
+      title: `Template:${root_name}`,
+      content_model: 'wikitext',
+      kind: 'template',
+    };
   }
-  const file = rest[0];
-  if (file !== `${root_name}.template.wikitext`) {
-    throw new Error(
-      `WikiWire: template file must be named ${root_name}.template.wikitext, got ${relative_path}`,
-    );
+  if (rel_under_root === 'doc.wikitext') {
+    return {
+      is_shared,
+      title: `Template:${root_name}/doc`,
+      content_model: 'wikitext',
+      kind: 'template',
+    };
   }
+
+  const content_model = content_model_for_repo_subfile(rel_under_root, css_content_model, {
+    allow_scribunto: false,
+  });
   return {
     is_shared,
-    title: `Template:${root_name}`,
-    content_model: 'wikitext',
+    title: `Template:${root_name}/${rel_under_root}`,
+    content_model,
     kind: 'template',
   };
+}
+
+export function content_model_for_repo_subfile(
+  rel_under_root: string,
+  css_content_model: string,
+  opts: { allow_scribunto: boolean },
+): string {
+  if (opts.allow_scribunto) {
+    if (rel_under_root.endsWith('.module.lua')) return 'scribunto';
+    if (rel_under_root.endsWith('.module.luau')) return 'scribunto';
+  } else {
+    if (rel_under_root.endsWith('.module.lua') || rel_under_root.endsWith('.module.luau')) {
+      throw new Error(
+        `WikiWire: ${rel_under_root}: Scribunto module files belong under modules/, not templates/`,
+      );
+    }
+  }
+
+  if (rel_under_root.endsWith('.wikitext')) return 'wikitext';
+  if (rel_under_root.endsWith('.css')) return css_content_model;
+  if (rel_under_root.endsWith('.json')) return 'json';
+
+  throw new Error(
+    `WikiWire: unsupported subfile extension: ${rel_under_root} (allowed: .module.lua, .module.luau, .wikitext, .css, .json; .module.lua/.module.luau only under modules/)`,
+  );
 }
 
 export function content_model_for_module_subfile(
   rel_under_root: string,
   css_content_model: string,
 ): string {
-  if (rel_under_root.endsWith('.module.lua')) return 'scribunto';
-
-  if (rel_under_root.endsWith('.module.luau')) {
-    return 'scribunto';
-  }
-  
-  if (rel_under_root.endsWith('.wikitext')) return 'wikitext';
-  if (rel_under_root.endsWith('.css')) return css_content_model;
-  if (rel_under_root.endsWith('.json')) return 'json';
-
-  throw new Error(
-    `WikiWire: unsupported module subfile extension: ${rel_under_root} (allowed: .module.lua, .module.luau, .wikitext, .css, .json)`,
-  );
+  return content_model_for_repo_subfile(rel_under_root, css_content_model, {
+    allow_scribunto: true,
+  });
 }
