@@ -1,0 +1,9 @@
+packages:
+  - '.'
+
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+
+minimumReleaseAge: 1440
+blockExoticSubdeps: true
