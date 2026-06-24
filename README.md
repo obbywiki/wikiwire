@@ -43,7 +43,14 @@ As seen above, WikiWire expects and *requires* that `modules/` and `templates/` 
 Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also be its `id` value if no `host` is set. Using the `host` value instead removes any ambiguity and is encouraged.
 
 > [!TIP] 
-> The `shared` key is a special key that can only be used as the shared directory when enabled in `wikiwire.toml`. Content under `modules/shared/` and `templates/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). If the `shared` option is disabled or false in `wikiwire.toml`, the action will error when reading from `shared/`. If you want to name a subfolder "shared" but don't want to trigger WikiWire, name the folder `_shared` instead. Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
+> The `shared` key is a special key that can only be used as the shared directory when enabled in `wikiwire.toml`. 
+> 
+> Content under `modules/shared/` and `templates/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). 
+> 
+> If the `shared` option is disabled or false in `wikiwire.toml`, the action will error when reading from `shared/`.
+> 
+> If you want to name a subfolder "shared" but don't want to trigger WikiWire, name the folder `_shared` instead. 
+> Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
 
 
 An example from the ObbyWiki's repository structure:
@@ -59,7 +66,7 @@ templates/obbywiki.com/MonthNav/styles.css
 modules/shared/CommonUtil/CommonUtil.module.lua
 ```
 
-You can see and use our live repository at https://github.com/obbywiki/modules.
+You can see and use our live repository at https://github.com/obbywiki/modules for guidance.
 
 ## Configuring WikWire
 
