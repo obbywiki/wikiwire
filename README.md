@@ -5,6 +5,8 @@
 
 WikiWire is a GitHub Action that syncs files under `modules/` and `templates/` inside your Git repository into a live MediaWiki site via the [MediaWiki Action API](https://www.mediawiki.org/wiki/API:Action_API). WikiWire allows for smooth automated workflows that make your GitHub repository the primary authority over your content and seem less like a backup.
 
+WikiWire was developed by the Obby Wiki to streamline sharing modules across not only GitHub and MediaWiki, but also across multiple wikis. While complex, it is possible to transpile Luau to Lua 5.1 and upload it via this tool, as seen in [`obbywiki/modules`](https://github.com/obbywiki/modules).
+
 # Compatibility Matrix
 
 | MediaWiki Version | Supported |
