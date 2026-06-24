@@ -5,21 +5,23 @@
 
 WikiWire is a GitHub Action that syncs files under `modules/` and `templates/` inside your Git repository into a live MediaWiki site via the [MediaWiki Action API](https://www.mediawiki.org/wiki/API:Action_API). WikiWire allows for smooth automated workflows that make your GitHub repository the primary authority over your content and seem less like a backup.
 
-## Compatibility Matrix
+# Compatibility Matrix
 
 | MediaWiki Version | Supported |
 | ------- | ------------------ |
 | MediaWiki 1.45 | :white_check_mark: Supported |
 | MediaWiki 1.44 | :white_check_mark: Supported |
 | MediaWiki 1.43 LTS | :white_check_mark: Supported |
-| MediaWiki 1.42 | :white_check_mark: Working, not supported |
+| MediaWiki 1.42 | :white_check_mark: Working, not officially supported |
 | MediaWiki ≤ 1.41 | :x: May work, not recommended |
 
-## How to use WikiWire
+Please report any bugs occurring on MW 1.43 or above.
+
+# How to use WikiWire
 
 WikiWire is a CI action you can add to your repository's CI as a new workflow, or integrate it into an existing workflow. If you do not already store your modules and templates inside a Git repository such as `obbywiki/modules`, you will have to [create a new repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository) in order to use WikiWire.
 
-### Required repository layout
+## Required repository layout
 
 To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced if neither a `modules/` nor a `templates/` folder is found in your repository.
 
@@ -40,7 +42,8 @@ As seen above, WikiWire expects and *requires* that `modules/` and `templates/` 
 
 Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also be its `id` value if no `host` is set. Using the `host` value instead removes any ambiguity and is encouraged.
 
-The `shared` key is a special key that can only be used as the shared directory when enabled in `wikiwire.toml`. Content under `modules/shared/` and `templates/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). If the `shared` option is disabled or false in `wikiwire.toml`, the action will error when reading from `shared/`. If you want to name a subfolder "shared" but don't want to trigger WikiWire, name the folder `_shared` instead. Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
+> [!TIP] 
+> The `shared` key is a special key that can only be used as the shared directory when enabled in `wikiwire.toml`. Content under `modules/shared/` and `templates/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). If the `shared` option is disabled or false in `wikiwire.toml`, the action will error when reading from `shared/`. If you want to name a subfolder "shared" but don't want to trigger WikiWire, name the folder `_shared` instead. Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
 
 
 An example from the ObbyWiki's repository structure:
@@ -58,7 +61,7 @@ modules/shared/CommonUtil/CommonUtil.module.lua
 
 You can see and use our live repository at https://github.com/obbywiki/modules.
 
-### Configuring WikWire
+## Configuring WikWire
 
 Supplying a `wikiwire.toml` file under your repository is **required**. However, through action parameters, you can change that if required. To set up your first site, look below for the recommended beginner `wikiwire.toml` file:
 
@@ -85,7 +88,7 @@ Next, for consistency, add a `.wikiwireignore` into the root of your repository.
 **/*.module.luau
 ```
 
-### Setting up the CI workflow
+## Setting up the CI workflow
 
 > [!NOTE]
 > This section of the guide only applies to repositories on GitHub. Instead, if you are not on GitHub, you may have to research how to set up a CI workflow yourself.
@@ -124,7 +127,7 @@ This workflow assumes two things:
 1. You have a user account named WikiWireBot on your wiki.
 2. You have created a bot password for it and have supplied WIKI_PASSWORD to GitHub.
 
-### How to setup a bot account and bot password
+## How to setup a bot account and bot password
 
 WikiWire requires a valid login in order to submit edits to your wiki.
 
@@ -152,7 +155,7 @@ username: UserAcccount@BotPasswordName
 
 Next, upload your bot password as a secret into your GitHub repository. For help: https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets
 
-### Testing the workflow
+## Testing the workflow
 
 After completing every step above, you should be ready to test WikiWire. Make any change to a module or a template and WikiWire should automatically sync it if everything is correct. To test your layout before actually syncing content, use the `dry_run` parameter.
 
