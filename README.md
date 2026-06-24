@@ -300,7 +300,7 @@ Please note that WikiWire is currently a BETA and this shouldn't be required in 
 | `config_path` | no | `wikiwire.toml` | Path to the TOML config. |
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits are sent (site-level `dry_run` in TOML still applies per site). |
-| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/` and `templates/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. |
+| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/` and `templates/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
 
 `dark_lua_compat` was removed in WikiWire v0.3.0, and supplying it as a parameter will produce an error.
 
@@ -325,7 +325,7 @@ on:
 jobs:
   wikiwire:
     runs-on: ubuntu-latest
-    name: Sync files to upstream MediaWiki
+    name: Sync files to production MediaWiki
     permissions:
       contents: read
     steps:
@@ -345,4 +345,4 @@ jobs:
 
 ## Releases/Builds
 
-Contributors to WikiWire must run `pnpm install` and `pnpm build` to build the `dist/index.js` release files
+Contributors to WikiWire must run `pnpm install` and `pnpm build` to build the `dist/index.js` release files via esbuild.
