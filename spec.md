@@ -1,22 +1,49 @@
-# WikiWire specification
+# WikiWire
 
-> [!NOTE]  
-> WikiWire is currently experimental. Please use cautiously and avoid potentially destructive configurations such as `sync_all` and consider experimenting with `dry_run`s first. 
+> [!IMPORTANT]  
+> WikiWire is currently experimental. Please use cautiously and avoid potentially destructive configurations such as `sync_all` and consider testing your configurations with `dry_run`s first.
 
-WikiWire is a GitHub Action that syncs changed files under `modules/` and `templates/` to a MediaWiki site via the [Action API](https://www.mediawiki.org/wiki/API:Action_API). Credentials are supplied only through the action inputs (or workflow secrets), never through the config file.
+WikiWire is a GitHub Action that syncs files under `modules/` and `templates/` inside your Git repository into a live MediaWiki site via the [MediaWiki Action API](https://www.mediawiki.org/wiki/API:Action_API). WikiWire allows for smooth automated workflows that make your GitHub repository the primary authority over your content and seem less like a backup.
 
-## Recommended repository layout
+## Compatibility Matrix
 
-Wiki content lives under a **path segment** (second directory under `modules/` or `templates/`):
+| MediaWiki Version | Supported |
+| ------- | ------------------ |
+| MediaWiki 1.45 | :white_check_mark: Supported |
+| MediaWiki 1.44 | :white_check_mark: Supported |
+| MediaWiki 1.43 LTS | :white_check_mark: Supported |
+| MediaWiki 1.42 | :white_check_mark: Working, not supported |
+| MediaWiki ≤ 1.41 | :x: May work, not recommended |
 
-- **Modules:** `modules/<path_segment>/<root_name>/…`
-- **Templates:** `templates/<path_segment>/<root_name>/…`
+## How to use WikiWire
 
-Ideally `<path_segment>` is the site’s `host` in `wikiwire.toml`, but can also be its `id` value, if no `host` is set. Using the `host` value instead removes any ambiguity. That keeps a stable `id` in config while the repo folder can stay a hostname.
+WikiWire is a CI action you can add to your repository's CI as a new workflow, or integrate it into an existing workflow. If you do not already store your modules and templates inside a Git repository such as `obbywiki/modules`, you will have to [create a new repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository) in order to use WikiWire.
 
-**Shared bucket (optional):** If `shared = true` in `wikiwire.toml`, `modules/shared/` and `templates/shared/` are synced to **every** configured site. Wiki titles are the same as for a single site (the `shared` segment is not part of the title). When `shared` is false, paths under `modules/shared/` or `templates/shared/` cause the action to fail with a clear error. If you want to name a subfolder shared but don't want to use the first-party WikiWire support, name the folder `_shared` instead.
+### Required repository layout
 
-Example:
+To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced if neither a `modules/` nor a `templates/` folder is found in your repository.
+
+```sh
+.
+├─ modules/
+│  └─ mywikidomain.org/
+│     └─ MyModule
+│        └─ MyModule.module.lua
+└─ wikiwire.toml
+└─ .wikiwireignore
+```
+
+As seen above, WikiWire expects and *requires* that `modules/` and `templates/` are stored under the root level of the repository, or they will be ignored.
+
+- **Modules:** `modules/<host|id>/<name>/...`
+- **Templates:** `templates/<host|id>/<name>/...`
+
+Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also be its `id` value if no `host` is set. Using the `host` value instead removes any ambiguity and is encouraged.
+
+The `shared` key is a special key that can only be used as the shared directory when enabled in `wikiwire.toml`. Content under `modules/shared/` and `templates/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). If the `shared` option is disabled or false in `wikiwire.toml`, the action will error when reading from `shared/`. If you want to name a subfolder "shared" but don't want to trigger WikiWire, name the folder `_shared` instead. Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
+
+
+An example from the ObbyWiki's repository structure:
 
 ```text
 modules/obbywiki.com/GroupLink/GroupLink.module.lua
@@ -31,12 +58,93 @@ modules/shared/CommonUtil/CommonUtil.module.lua
 
 You can see and use our live repository at https://github.com/obbywiki/modules.
 
-- `<path_segment>` must match a site’s `id` or `host`, or be the literal `shared` (when `shared = true`).
-- `<root_name>` is the module or template root (e.g. `GroupLink`). For the main module file and template file, the basename in the filename must match `<root_name>`.
+### Configuring WikWire
 
-### Paths skipped automatically
+Supplying a `wikiwire.toml` file under your repository is **required**. However, through action parameters, you can change that if required. To set up your first site, look below for the recommended beginner `wikiwire.toml` file:
 
-Any path under `modules/` or `templates/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
+```toml
+# This is a global WikiWire configuration file, a CI action which automatically syncs and uploads modules and templates from a Git repo towards a production or upstream MediaWiki instance via bot passwords and the MediaWiki Action API.
+# Learn more: https://github.com/obbywiki/wikiwire
+
+version = 1
+shared = false
+
+[[sites]]
+id = "mywiki"
+host = "mywikidomain.org"
+api = "https://mywikidomain.org/api.php"
+default_branch = "main"
+css_content_model = "css"
+```
+
+Replace each value with what matches your wiki and verify if `api.php` is reachable for bots. Your `api.php` file may be at `/w/api.php` or some other script path instead.
+
+Next, for consistency, add a `.wikiwireignore` into the root of your repository. You can leave this blank, but you may need it later, so keep it around. You can also ignore Luau files this way:
+
+```
+**/*.module.luau
+```
+
+### Setting up the CI workflow
+
+> [!NOTE]
+> This section of the guide only applies to repositories on GitHub. Instead, if you are not on GitHub, you may have to research how to set up a CI workflow yourself.
+
+Begin by adding a CI file at `.github/workflows/wikiwire.yml`. Then, paste the start template below into the contents and save them:
+
+```yaml
+name: WikiWire
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'modules/**'
+      - 'modules/*'
+      - 'templates/**'
+      - 'templates/*'
+
+jobs:
+  wikiwire:
+    runs-on: ubuntu-latest
+    name: Sync files to production MediaWiki
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: obbywiki/wikiwire@latest # WikWire is pre-v1 software, consider tethering your workflow to the current latest release to avoid breaking changes
+        with:
+          username: WikiWireBot@BotPasswordNameHere # replace with your bot user and bot password
+          password: ${{ secrets.WIKI_PASSWORD }}
+          # dry_run: true # if you want to test your configs and routing first
+```
+
+This workflow assumes two things:
+
+1. You have a user account named WikiWireBot on your wiki.
+2. You have created a bot password for it and have supplied WIKI_PASSWORD to GitHub.
+
+### How to setup a bot account and bot password
+
+WikiWire requires a valid login in order to submit edits to your wiki.
+
+Create a bot account on your wiki. Consider giving it the `bot` user group or even `sysop` (admin) permissions as they may be required to make edits quickly.
+
+Next, navigate to `Special:BotPasswords` and create a bot password with the following permissions:
+
+* Basic rights
+* High-volume (bot) access
+* Edit existing pages
+* Edit protected pages
+* Create, edit, and move pages
+
+You may also optionally enable:
+
+* Edit the MediaWiki namespace and sitewide/user JSON
+
+Enable access for every IP address (0.0.0.0/0 and ::/0) as GitHub CI often rotates IP addresses.
+
+After creating a user account and password, edit your existing workflow and update the `username` parameter. It should look something like this: `UserAcccount@BotPasswordName`
 
 ## Path to wiki title mapping
 
