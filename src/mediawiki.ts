@@ -3,7 +3,7 @@
 const WIKIWIRE_UA = 'WikiWire/1.0'; // do not change unless the featureset drastically changes (UA may be whitelisted)
 
 type mw_query = {
-    tokens ?: { login ?: string; csrf ?: string };
+    tokens ?: { logintoken ?: string; csrftoken ?: string };
     pages ?: Record<string, { missing ?: boolean }>;
 };
 
@@ -49,18 +49,18 @@ function get_set_cookie_lines(headers : Headers) : string[] {
 };
 
 export class mw_session {
-    api_url: string;
-    username: string;
-    password: string;
-    cookies: Map<string, string>;
-    csrf: string | null;
+    api_url : string;
+    username : string;
+    password : string;
+    cookies : Map<string, string>;
+    csrftoken : string | null;
 
     constructor(api_url : string, username : string, password : string) {
         this.api_url = api_url;
         this.username = username;
         this.password = password;
         this.cookies = new Map();
-        this.csrf = null;
+        this.csrftoken = null;
     };
 
     _merge_set_cookie(headers: Headers): void {
@@ -116,9 +116,9 @@ export class mw_session {
             const www_auth = res.headers.get('www-authenticate');
             const server = res.headers.get('server');
             
-            if (cf_ray) scope.push(`cf-ray=${cf_ray}`);
-            if (www_auth) scope.push(`www-authenticate=${www_auth}`);
-            if (server) scope.push(`server=${server}`);
+            if (cf_ray) { scope.push(`cf-ray=${cf_ray}`) };
+            if (www_auth) { scope.push(`www-authenticate=${www_auth}`) };
+            if (server) { scope.push(`server=${server}`) };
 
             const body_note = summarize_error_body(detail, 400);
             let hint = '';
@@ -140,11 +140,9 @@ export class mw_session {
         let data = await this._post({ action: 'query', meta: 'tokens', type: 'login' });
 
         const query = data.query;
-        let login_token = query?.tokens?.login;
+        let login_token = query?.tokens?.logintoken;
 
-        if (!login_token) {
-            throw new Error('WikiWire API error: could not get login token from MediaWiki');
-        };
+        if (!login_token) { throw new Error('WikiWire API error: could not get login token from MediaWiki'); };
 
         data = await this._post({
             action: 'login',
@@ -172,9 +170,9 @@ export class mw_session {
 
         const q2 = data.query;
 
-        this.csrf = q2?.tokens?.csrf ?? null;
+        this.csrftoken = q2?.tokens?.csrftoken ?? null;
 
-        if (!this.csrf) { throw new Error('WikiWire API error: could not get CSRF token from MediaWiki'); };
+        if (!this.csrftoken) { throw new Error('WikiWire API error: could not get CSRF token from MediaWiki'); };
 
         // no return expected
     };
@@ -193,7 +191,7 @@ export class mw_session {
     };
 
     async edit(title : string, text : string, summary : string, content_model : string) : Promise<void> {
-        if (!this.csrf) { throw new Error('WikiWire API error: not logged in (missing CSRF token)'); };
+        if (!this.csrftoken) { throw new Error('WikiWire API error: not logged in (missing CSRF token)'); };
 
         const exists = await this.page_exists(title);
         const params: Record<string, string> = {
@@ -201,7 +199,7 @@ export class mw_session {
             title,
             text,
             summary,
-            token: this.csrf,
+            token: this.csrftoken,
             bot: '1',
         };
 
