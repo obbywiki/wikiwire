@@ -30,7 +30,7 @@ inputs:
     required: false
     default: "false"
   sync_all:
-    description: If true, sync all files under modules/ and templates/ from the workspace instead of commit diffs (use for workflow_dispatch or full sync)
+    description: NOT RECOMMENDED FOR MOST USE-CASES! If true ("override"), sync all files under modules/ and templates/ from the workspace instead of commit diffs (use for workflow_dispatch or full sync)
     required: false
     default: "false"
 
