@@ -144,7 +144,25 @@ You may also optionally enable:
 
 Enable access for every IP address (0.0.0.0/0 and ::/0) as GitHub CI often rotates IP addresses.
 
-After creating a user account and password, edit your existing workflow and update the `username` parameter. It should look something like this: `UserAcccount@BotPasswordName`
+After creating a user account and password, edit your existing workflow and update the `username` parameter. It should look something like this:
+
+```yaml
+username: UserAcccount@BotPasswordName
+```
+
+Next, upload your bot password as a secret into your GitHub repository. For help: https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets
+
+### Testing the workflow
+
+After completing every step above, you should be ready to test WikiWire. Make any change to a module or a template and WikiWire should automatically sync it if everything is correct. To test your layout before actually syncing content, use the `dry_run` parameter.
+
+If you are having trouble setting up WikiWire, use our repository as a guide: https://github.com/obbywiki/modules.
+
+Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action API.
+
+# WikiWire Specification
+
+For additional details, see the specification here.
 
 ## Path to wiki title mapping
 
@@ -272,8 +290,9 @@ Please note that WikiWire is currently a BETA and this shouldn't be required in 
 | `config_path` | no | `wikiwire.toml` | Path to the TOML config. |
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits are sent (site-level `dry_run` in TOML still applies per site). |
-| `sync_all` | no | `false` | If `true`, sync every file under `modules/` and `templates/` from the workspace instead of using commit diffs. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. |
-| `dark_lua_compat` | no | `""` | **Deprecated** and ignored. Luau modules are always synced as Scribunto. Add `**/*.module.luau` to your `.wikiwireignore` file instead. |
+| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/` and `templates/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. |
+
+`dark_lua_compat` was removed in WikiWire v0.3.0, and supplying it as a parameter will produce an error.
 
 Use a workflow `permissions` block with at least `contents: read` so the default `GITHUB_TOKEN` can call the compare API.
 
@@ -307,128 +326,7 @@ jobs:
           password: ${{ secrets.WIKI_PASSWORD }}
 ```
 
-## Darklua in CI (pre-upload)
-
-**DarkLua support is currently experimental and may be a bit finnicky.**
-
-WikiWire uploads whatever is in the checked-out workspace under `modules/` and `templates/`. If you generate or transform Lua/Luau in CI (for example with Darklua), run that step **before** WikiWire.
-
-For **push** syncs (default `sync_all: false`), when the GitHub diff includes a path `modules/**/*.module.luau`, WikiWire also adds the sibling `*.module.lua` path (same basename, `.module.lua` instead of `.module.luau`) if that file **exists in the workspace**. That covers CI that runs Darklua on changed Luau and writes `*.module.lua` without committing it—the Lua file does not have to appear in the commit diff. Put `**/*.module.luau` in `.wikiwireignore` if you want only the generated Lua synced to the wiki (both map to the same `Module:` title).
-
-Use `sync_all: "true"` when you need to upload from the whole tree (for example many generated files that are not tied to changed `*.module.luau` paths in the diff).
-
-Example (outline):
-
-```yaml
-    steps:
-      - uses: actions/checkout@v4
-      # install your tooling (darklua, compiler, etc.)
-      # run darklua so modules/** contains the final output
-      - uses: obbywiki/wikiwire@latest
-        with:
-          sync_all: "true"
-          username: WikiWireBot@BotPasswordNameHere
-          password: ${{ secrets.WIKI_PASSWORD }}
-```
-
-### Darklua without `sync_all` (transpile only changed Luau modules)
-
-You can avoid `sync_all` in two ways:
-
-1. **Commit generated Lua:** Keep `*.module.luau`, run Darklua, **commit** sibling `*.module.lua`. The diff usually lists both; add `**/*.module.luau` to `.wikiwireignore` if you want only the Lua file uploaded.
-
-2. **CI-only Lua:** In the same job, checkout → Darklua (so `*.module.lua` exists on disk) → WikiWire. The push diff need only include the changed `*.module.luau`; WikiWire adds the sibling `*.module.lua` path when that file exists in the workspace. Still use `.wikiwireignore` for `*.module.luau` so the wiki receives the Lua output, not the Luau source.
-
-Example workflow (outline; first variant assumes `*.module.lua` outputs are **committed** alongside sources):
-
-```yaml
-name: WikiWire (with Darklua)
-
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'modules/**'
-      - 'templates/**'
-
-jobs:
-  darklua_check:
-    name: Verify Darklua outputs are up-to-date
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Darklua # (pick your preferred installation method) and make sure it's up to date
-        run: |
-          wget https://github.com/seaofvoices/darklua/releases/download/v0.18.0/darklua-linux-x86_64.zip
-          unzip darklua-linux-x86_64.zip
-          chmod +x darklua
-
-      - name: Regenerate Lua outputs for changed Luau modules
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          changed_files="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")"
-          while IFS= read -r path; do
-            [[ "$path" == modules/**/*.module.luau ]] || continue
-
-            out_path="${path%.module.luau}.module.lua"
-            mkdir -p "$(dirname "$out_path")"
-
-            # Example CLI shape (adjust flags to your darklua config)
-            darklua process --config .darklua.json "$path" "$out_path"
-          done <<< "$changed_files"
-
-      - name: Fail if outputs were not committed
-        run: git diff --exit-code
-
-  wikiwire:
-    name: Sync files to upstream MediaWiki
-    runs-on: ubuntu-latest
-    needs: [darklua_check]
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: obbywiki/wikiwire@latest
-        with:
-          # default: sync_all: "false"
-          username: WikiWireBot@BotPasswordNameHere
-          password: ${{ secrets.WIKI_PASSWORD }}
-```
-
-### Example: different credentials per site
-
-Use `site_credentials` with one JSON object. Interpolate secrets per field, or store the entire JSON in a single secret and pass `site_credentials: ${{ secrets.WIKIWIRE_SITE_CREDENTIALS_JSON }}`.
-
-```yaml
-      - uses: obbywiki/wikiwire@latest
-        with:
-          site_credentials: |
-            {
-              "production.example": {
-                "username": "WikiWireBot@prod",
-                "password": "${{ secrets.WIKI_PASSWORD_PROD }}"
-              },
-              "dev": {
-                "username": "WikiWireBot@dev",
-                "password": "${{ secrets.WIKI_PASSWORD_DEV }}"
-              }
-            }
-```
-
-You can combine global `username` / `password` with `site_credentials`: only sites with an entry in the JSON use the per-site pair; all others use the defaults.
-
-## Security
-
-- Store `password` and per-site passwords in GitHub **secrets**, not in committed workflow YAML (except `${{ secrets.* }}` references).
-- Prefer **Bot passwords** with the minimum rights needed (`editpage`, `highvolume`, etc.).
-- The config file must remain free of secrets so it can be committed safely.
-
-## Limitations (v1)
+## Limitations
 
 - **Deletes:** Removing a file from git does **not** delete the wiki page.
 - **Renames:** Appear as delete + add; see deletes.
@@ -437,4 +335,4 @@ You can combine global `username` / `password` with `site_credentials`: only sit
 
 ## Releases/Builds
 
-After changing `src/`, run `pnpm install` and `pnpm build` so `dist/index.js` is updated before tagging a release consumers pin to.
+Contributors to WikiWire must run `pnpm install` and `pnpm build` to build the `dist/index.js` release files
