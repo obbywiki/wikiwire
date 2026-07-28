@@ -9,6 +9,7 @@ export type site_config = {
   default_branch : string | null;
   css_content_model : string;
   common : boolean;
+  shared_groups : Set<string>;
 };
 
 // toml configs arent typed
@@ -22,6 +23,7 @@ type site_entry = {
   css_content_model ?: unknown;
   host ?: unknown;
   common ?: unknown;
+  shared_groups ?: unknown;
 };
 
 
@@ -51,6 +53,25 @@ export function load_config(config_path : string) : { schema_version : number; s
         if (typeof s.id !== 'string' || typeof s.api !== 'string') { throw new Error('WikiWire config error: each site at minimum needs a string `id` and `api` value'); }
 
 
+        const shared_groups = new Set<string>();
+        if (s.shared_groups !== undefined) {
+            if (!Array.isArray(s.shared_groups)) { throw new Error(`WikiWire config error: site "${s.id}" shared_groups must be an array of strings if set`); };
+
+            for (const raw_group of s.shared_groups) {
+                if (typeof raw_group !== 'string') { throw new Error(`WikiWire config error: site "${s.id}" shared_groups must contain only strings`); };
+
+                const group_name = raw_group.trim();
+                if (group_name.length === 0) { throw new Error(`WikiWire config error: site "${s.id}" shared_groups entries must not be empty`); };
+
+                shared_groups.add(group_name);
+            };
+        };
+
+        const common = Boolean(s.common);
+        if (common) {
+            shared_groups.add('common');
+        };
+
         const local_site_config : site_config = {
             id : s.id,
             api : s.api.trim(),
@@ -59,7 +80,8 @@ export function load_config(config_path : string) : { schema_version : number; s
             css_content_model: typeof s.css_content_model === 'string' ? s.css_content_model : 'sanitized-css',
 
             dry_run : Boolean(s.dry_run),
-            common : Boolean(s.common),
+            common,
+            shared_groups,
         };
 
 
@@ -72,6 +94,7 @@ export function load_config(config_path : string) : { schema_version : number; s
         if (path_segment.length === 0) { throw new Error(`WikiWire: site "${s.id}" host must not be empty`); };
         if (shared_enabled && path_segment === 'shared') { throw new Error( `WikiWire config error: site "${s.id}" cannot use path segment "shared" when shared = true (reserved for modules/shared, templates/shared, and mediawiki/shared)`, ); };
         if (common_enabled && path_segment === 'common') { throw new Error( `WikiWire config error: site "${s.id}" cannot use path segment "common" when common = true (reserved for modules/common, templates/common, and mediawiki/common)`, ); };
+        if (/^shared-.+/.test(path_segment)) { throw new Error( `WikiWire config error: site "${s.id}" cannot use path segment "${path_segment}" because shared site groups reserve all "shared-*" directory names`, ); };
 
         if (path_to_site.has(path_segment)) {
             const other = path_to_site.get(path_segment);

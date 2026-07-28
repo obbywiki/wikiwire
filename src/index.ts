@@ -5,7 +5,7 @@ import path from 'node:path';
 import ignore from 'ignore';
 
 import { load_config, type site_config } from './config';
-import { map_repo_path, type mapped_path } from './paths';
+import { map_repo_path, parse_shared_path_segment, type mapped_path } from './paths';
 import { mw_session } from './mediawiki';
 import { parse_site_credentials } from './site_credentials';
 
@@ -19,6 +19,40 @@ type sync_job = {
     file : string;
     mapped : mapped_path;
     site_cfg : site_config;
+};
+
+function resolve_shared_targets(path_segment : string, sites : Map<string, site_config>, opts : { shared_enabled : boolean; common_enabled : boolean }) : { targets : site_config[]; description : string } | null {
+    const parsed = parse_shared_path_segment(path_segment);
+    if (!parsed) { return null };
+
+    if (parsed.kind === 'shared') {
+        if (!opts.shared_enabled) {
+            throw new Error(`WikiWire: set shared = true in wikiwire.toml to use the reserved ${path_segment} directory`);
+        };
+
+        return {
+            targets: Array.from(sites.values()),
+            description: 'all configured sites',
+        };
+    };
+
+    if (parsed.kind === 'common') {
+        if (!opts.common_enabled) {
+            throw new Error(`WikiWire: set common = true in wikiwire.toml to use the reserved ${path_segment} directory`);
+        };
+
+        const targets = Array.from(sites.values()).filter((site_cfg) => site_cfg.shared_groups.has('common'));
+        return {
+            targets,
+            description: 'sites enrolled in the common shared group',
+        };
+    };
+
+    const targets = Array.from(sites.values()).filter((site_cfg) => site_cfg.shared_groups.has(parsed.group_name ?? ''));
+    return {
+        targets,
+        description: `sites enrolled in shared group "${parsed.group_name}"`,
+    };
 };
 
 function is_zero_sha(sha : string | undefined) : boolean { 
@@ -160,12 +194,9 @@ async function run() : Promise<void> {
 
         const path_segment = parts[1];
 
-        if (path_segment === 'shared' || path_segment === 'common') {
-            const pool_enabled = path_segment === 'shared' ? shared_enabled : common_enabled;
-
-            if (!pool_enabled) {
-                throw new Error( `WikiWire: ${file} uses ${parts[0]}/${path_segment}; set ${path_segment} = true in wikiwire.toml or move the file under a site path` );
-            };
+        const shared_targets = resolve_shared_targets(path_segment, sites, { shared_enabled, common_enabled });
+        if (shared_targets) {
+            if (shared_targets.targets.length === 0) { throw new Error(`WikiWire: ${file} uses ${parts[0]}/${path_segment}, but no configured site belongs to ${shared_targets.description}`); };
 
             const full_file = path.join(workspace, file);
 
@@ -173,12 +204,7 @@ async function run() : Promise<void> {
 
             const ref = github.context.ref;
 
-            for (const site_cfg of sites.values()) {
-                if (path_segment === 'common' && !site_cfg.common) {
-                    core.info(`WikiWire: skip ${file} for site ${site_cfg.id} (site is not enrolled in common)`);
-                    continue;
-                };
-
+            for (const site_cfg of shared_targets.targets) {
                 if (site_cfg.default_branch && ref !== `refs/heads/${site_cfg.default_branch}`) {
                     core.info( `WikiWire: skip ${file} for site ${site_cfg.id} (ref ${ref} is not refs/heads/${site_cfg.default_branch})` );
                     continue;
