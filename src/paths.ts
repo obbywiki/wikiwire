@@ -14,6 +14,25 @@ export type mapped_site = {
 
 export type mapped_path = mapped_shared | mapped_site;
 
+export function parse_shared_path_segment(path_segment : string) : { kind : 'shared' | 'common' | 'group'; group_name ?: string } | null {
+    if (path_segment === 'shared') {
+        return { kind: 'shared' };
+    };
+
+    if (path_segment === 'common') {
+        return { kind: 'common', group_name: 'common' };
+    };
+
+    if (path_segment.startsWith('shared-')) {
+        const group_name = path_segment.slice('shared-'.length).trim();
+        if (group_name.length === 0) { return null };
+
+        return { kind: 'group', group_name };
+    };
+
+    return null;
+};
+
 // strips an optional repo label prefix (e.g. `imported:`, `Module:`) from a container folder name
 export function wiki_name_from_root(root_name : string) : string {
     const colon = root_name.indexOf(':');
@@ -170,7 +189,7 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
     if (root !== 'modules' && root !== 'templates' && root !== 'mediawiki') { return null };
 
     const path_segment = parts[1];
-    const is_shared = path_segment === 'shared' || path_segment === 'common';
+    const is_shared = parse_shared_path_segment(path_segment) !== null;
 
     if (root === 'mediawiki' && parts.length === 3) {
         return map_mediawiki_flat_file(parts[2], is_shared, css_content_model, ignore_content_model_errors, relative_path);

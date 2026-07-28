@@ -16,7 +16,7 @@ version = 1
 
 ## shared (boolean)
 
-Whether to enable the shared sites folder or not. If set to false, WikiWire will throw an error whenever it reads the `/shared` directory of `modules/`, `templates/`, or `mediawiki/`.
+Whether to enable the global shared folder or not. If set to false, WikiWire will throw an error whenever it reads the `/shared` directory of `modules/`, `templates/`, or `mediawiki/`. When enabled, content under those directories is synced to every configured site.
 
 ```
 shared = false
@@ -24,7 +24,7 @@ shared = false
 
 ## common (boolean)
 
-Whether to enable the common sites folder or not. If set to false, WikiWire will throw an error whenever it reads the `/common` directory of `modules/`, `templates/`, or `mediawiki/`. When enabled, content is synced only to `[[sites]]` entries that set `common = true`.
+Whether to enable the legacy `common` shared group folder or not. If set to false, WikiWire will throw an error whenever it reads the `/common` directory of `modules/`, `templates/`, or `mediawiki/`. When enabled, content is synced only to `[[sites]]` entries that set `common = true`.
 
 ```
 common = false
@@ -48,7 +48,7 @@ Stable site key (sessions, logs). Must be unique across rows.
 
 ### host (string)
 
-Directory name under `modules/`, `templates/`, and `mediawiki/`. If omitted, defaults to id. Must be unique across sites. Cannot be `shared` when `shared = true` or `common` when `common = true` (those names are reserved).
+Directory name under `modules/`, `templates/`, and `mediawiki/`. If omitted, defaults to id. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` name because those path segments are reserved for shared site groups.
 
 ### api (string) (required)
 
@@ -68,7 +68,17 @@ Content model for `*.css` files under `modules/`, `templates/`, and `mediawiki/`
 
 ### common (boolean)
 
-If true, this site receives content from `modules/common/`, `templates/common/`, and `mediawiki/common/` when top-level `common = true`. Default false.
+If true, this site receives content from `modules/common/`, `templates/common/`, and `mediawiki/common/` when top-level `common = true`. This is also treated as membership in the `common` shared group for backward compatibility. Default false.
+
+### shared_groups (array of strings)
+
+Named shared site groups that this site belongs to. A path segment of the form `shared-<group>` under `modules/`, `templates/`, or `mediawiki/` syncs to every site whose `shared_groups` contains that group name.
+
+Example:
+
+```toml
+shared_groups = ["lang", "public"]
+```
 
 ## mediawiki/ layout
 
@@ -99,6 +109,7 @@ id = "obbywiki"
 host = "obby.wiki"
 api = "https://obby.wiki/api.php"
 common = true
+shared_groups = ["lang"]
 
 [[sites]]
 id = "dev"
@@ -107,8 +118,11 @@ api = "https://dev.example.org/w/api.php"
 dry_run = true
 default_branch = "main"
 css_content_model = "css"
+shared_groups = ["lang", "staging"]
 
 ```
+
+With the config above, content under `modules/shared-lang/`, `templates/shared-lang/`, or `mediawiki/shared-lang/` syncs to both sites, while `modules/common/` still syncs only to sites that set `common = true`.
 
 # GitHub Action inputs
 

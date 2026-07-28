@@ -55,11 +55,13 @@ Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also b
 > If you want to name a subfolder "shared" but don't want to trigger WikiWire, name the folder `_shared` instead. 
 > Any path under `modules/`, `templates/`, or `mediawiki/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
 >
-> The `common` key works like `shared`, but each site must opt in. When `common = true` in `wikiwire.toml`, content under `modules/common/`, `templates/common/`, and `mediawiki/common/` is synced only to `[[sites]]` entries that set `common = true`. On-wiki titles are the same as for a single site (the `common` segment is not part of the title). Use `common/` for things like Module:Arguments.
+> Shared site groups use path segments like `shared-lang` or `shared-public`. Content under `modules/shared-lang/`, `templates/shared-lang/`, and `mediawiki/shared-lang/` is synced only to sites whose `shared_groups` includes `lang`. On-wiki titles are the same as for a single site.
+>
+> The `common` key works like a legacy shared site group. When `common = true` in `wikiwire.toml`, content under `modules/common/`, `templates/common/`, and `mediawiki/common/` is synced only to `[[sites]]` entries that set `common = true`. On-wiki titles are the same as for a single site (the `common` segment is not part of the title). Use `common/` for things like Module:Arguments.
 >
 > If the `common` option is disabled or false in `wikiwire.toml`, the action will error when reading from `common/`.
 >
-> If you want to name a subfolder "common" but don't want to trigger WikiWire, name the folder `_common` instead.
+> If you want to name a subfolder "common" or `shared-...` but don't want to trigger WikiWire, name the folder `_common` or `_shared-...` instead.
 
 
 An example from the ObbyWiki's repository structure:
@@ -78,6 +80,7 @@ mediawiki/obbywiki.com/Common.css
 mediawiki/obbywiki.com/Citizen.js
 mediawiki/obbywiki.com/Sitenotice/ja
 modules/shared/CommonUtil/CommonUtil.module.lua
+modules/shared-lang/Translate/Translate.module.lua
 ```
 
 You can see and use our live repository at https://github.com/obbywiki/modules for guidance.
@@ -99,6 +102,7 @@ host = "mywikidomain.org"
 api = "https://mywikidomain.org/api.php"
 default_branch = "main"
 css_content_model = "css"
+shared_groups = ["lang"]
 ```
 
 Replace each value with what matches your wiki and verify if `api.php` is reachable for bots. Your `api.php` file may be at `/w/api.php` or some other script path instead.
@@ -288,7 +292,7 @@ Place at the repository root unless you override with the `config_path` action i
 |-----|------|----------|-------------|
 | `version` | integer | no | Config schema version; default `1`. Reserved for future use. |
 | `shared` | boolean | no | If true, enables `modules/shared/`, `templates/shared/`, and `mediawiki/shared/`, synced to every `[[sites]]` entry. Default false. |
-| `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, and `mediawiki/common/`. Synced only to `[[sites]]` entries with `common = true`. Default false. |
+| `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, and `mediawiki/common/`. Synced only to `[[sites]]` entries with `common = true`. This remains supported as a legacy shared group. Default false. |
 | `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Default false. |
 
 ### `[[sites]]` (repeatable)
@@ -296,12 +300,13 @@ Place at the repository root unless you override with the `config_path` action i
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
 | `id` | string | yes | Stable site key (sessions, logs). Must be unique across rows. |
-| `host` | string | no | Directory name under `modules/`, `templates/`, and `mediawiki/`. If omitted, defaults to `id`. Must be unique across sites. Cannot be `shared` when `shared = true` or `common` when `common = true` (those names are reserved). |
+| `host` | string | no | Directory name under `modules/`, `templates/`, and `mediawiki/`. If omitted, defaults to `id`. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` value because those names are reserved for shared site groups. |
 | `api` | string | yes | Full MediaWiki API URL, e.g. `https://example.org/w/api.php`. |
 | `dry_run` | boolean | no | If true, only log planned edits; no `action=edit` requests for this site. |
 | `default_branch` | string | no | If set, the action skips syncing when the workflow ref is not this branch (e.g. `refs/heads/main`). |
 | `css_content_model` | string | no | Content model for `*.css` files under `modules/`, `templates/`, and `mediawiki/`. Default `sanitized-css`. Some wikis need `css`. |
 | `common` | boolean | no | If true, this site receives content from `modules/common/`, `templates/common/`, and `mediawiki/common/` when top-level `common = true`. Default false. |
+| `shared_groups` | array of strings | no | Named shared site groups this site belongs to. A path such as `modules/shared-lang/` targets every site whose `shared_groups` contains `lang`. |
 
 Example:
 
@@ -311,10 +316,12 @@ Example:
 
 version = 1
 shared = true
+common = true
 
 [[sites]]
 id = "obbywiki.com"
 api = "https://obbywiki.com/w/api.php"
+shared_groups = ["lang", "public"]
 
 [[sites]]
 id = "dev"
@@ -323,7 +330,15 @@ api = "https://dev.example.org/w/api.php"
 dry_run = true
 default_branch = "main"
 css_content_model = "css"
+common = true
+shared_groups = ["lang"]
 ```
+
+With this configuration:
+
+- `modules/shared/...` syncs to every site.
+- `modules/common/...` syncs only to sites with `common = true`.
+- `modules/shared-lang/...` syncs only to sites with `shared_groups = ["lang", ...]`.
 
 Credentials are **not** stored in this file. Use action inputs backed by secrets.
 
