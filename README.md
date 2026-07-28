@@ -186,6 +186,48 @@ Next, upload your bot password as a secret into your GitHub repository. For help
 
 After completing every step above, you should be ready to test WikiWire. Make any change to a module or a template and WikiWire should automatically sync it if everything is correct. To test your layout before actually syncing content, use the `dry_run` parameter.
 
+### Dry-run on pull requests
+
+A common pattern is to keep production syncs on `push` to `main`, and run WikiWire with `dry_run: true` on pull requests so contributors can verify routing and titles in CI logs without editing the wiki.
+
+Non-`push` events do not provide commit compare data, so PR jobs must set `sync_all: override`. That walks every file under `modules/`, `templates/`, and `mediawiki/` in the checked-out workspace (not only files changed in the PR). With `dry_run: true`, WikiWire only logs planned edits and does not log in or call `action=edit`, so credentials are optional.
+
+Add a second workflow (for example `.github/workflows/wikiwire-dry-run.yml`):
+
+```yaml
+name: WikiWire dry-run
+
+on:
+  pull_request:
+    paths:
+      - 'modules/**'
+      - 'modules/*'
+      - 'templates/**'
+      - 'templates/*'
+      - 'mediawiki/**'
+      - 'mediawiki/*'
+      - 'wikiwire.toml'
+      - '.wikiwireignore'
+
+jobs:
+  wikiwire-dry-run:
+    runs-on: ubuntu-latest
+    name: Dry-run sync plan
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: obbywiki/wikiwire@latest
+        with:
+          dry_run: true
+          sync_all: override
+```
+
+Successful runs log lines like `WikiWire: [dry-run] would edit Module:MyModule on mywiki <= modules/mywikidomain.org/MyModule/MyModule.module.lua`.
+
+> [!WARNING]
+> If a site sets `default_branch` in `wikiwire.toml`, WikiWire skips that site whenever `github.ref` is not `refs/heads/<default_branch>`. Pull request refs look like `refs/pull/123/merge`, so those sites will be skipped in PR dry-runs. Omit `default_branch` for sites you want validated on PRs, or rely on the workflow's `on.push.branches` filter for production syncs instead.
+
 If you are having trouble setting up WikiWire, use our repository as a guide: https://github.com/obbywiki/modules.
 
 Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action API.
@@ -292,7 +334,7 @@ Place at the repository root unless you override with the `config_path` action i
 |-----|------|----------|-------------|
 | `version` | integer | no | Config schema version; default `1`. Reserved for future use. |
 | `shared` | boolean | no | If true, enables `modules/shared/`, `templates/shared/`, and `mediawiki/shared/`, synced to every `[[sites]]` entry. Default false. |
-| `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, and `mediawiki/common/`. Synced only to `[[sites]]` entries with `common = true`. This remains supported as a legacy shared group. Default false. |
+| `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, and `mediawiki/common/`. Synced only to `[[sites]]` entries with `common = true`. Default false. |
 | `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Default false. |
 
 ### `[[sites]]` (repeatable)
