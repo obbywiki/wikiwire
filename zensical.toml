@@ -49,6 +49,7 @@ nav = [
   { "Get started" = "index.md" },
   { "wikiwire.toml Reference" = "wikiwire-toml-reference.md" },
   { ".wikiwireignore Reference" = "wikiwire-ignore-reference.md" },
+  { "Pull Requests" = "prs.md" },
   { "Bypassing Cloudflare" = "bypassing-cloudflare.md" },
   { "Minification" = "minification.md" },
 ]
