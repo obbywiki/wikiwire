@@ -15,10 +15,22 @@ const REPO_ROOTS = ['modules', 'templates', 'mediawiki'] as const;
 
 type push_payload = { after ?: string; before ?: string };
 
+type path_change = {
+    file : string;
+    kind : 'edit' | 'delete';
+};
+
 type sync_job = {
     file : string;
     mapped : mapped_path;
     site_cfg : site_config;
+    kind : 'edit' | 'delete';
+};
+
+type gh_file = {
+    filename ?: string | null;
+    status ?: string | null;
+    previous_filename ?: string | null;
 };
 
 function resolve_shared_targets(path_segment : string, sites : Map<string, site_config>, opts : { shared_enabled : boolean; common_enabled : boolean }) : { targets : site_config[]; description : string } | null {
@@ -66,42 +78,121 @@ function walk_files(dir : string, workspace : string, out : string[]) : void {
         const full = path.join(dir, ent.name);
 
         if (ent.isDirectory()) {
-          walk_files(full, workspace, out);
+            walk_files(full, workspace, out);
         } else {
             out.push(path.relative(workspace, full).split(path.sep).join('/'));
         };
     };
 };
 
-// sync symbling paths. e.g., if example.module.lua was genereated from example.module.luau, syncc example.module.lua
-function add_sibling_lua_paths(filenames : string[], workspace : string) : string[] {
-    const seen = new Set<string>();
-    const out: string[] = [];
+function prefix_has_remaining_files(workspace : string, dir_rel : string) : boolean {
+    const full = path.join(workspace, dir_rel);
+    if (!fs.existsSync(full)) { return false };
 
-    for (const f of filenames) {
-        if (!seen.has(f)) {
-            seen.add(f);
-            out.push(f);
+    const found : string[] = [];
+    walk_files(full, workspace, found);
+    
+    return found.length > 0;
+};
+
+// sync sibling paths. e.g., if example.module.lua was generated from example.module.luau, sync example.module.lua
+function add_sibling_lua_edits(changes : path_change[], workspace : string) : path_change[] {
+    const seen = new Set<string>();
+    const out : path_change[] = [];
+
+    for (const c of changes) {
+        const key = `${c.kind}:${c.file}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            out.push(c);
         };
     };
 
-    for (const p of filenames) {
-        if (!p.startsWith('modules/') || !p.endsWith('.module.luau')) { continue };
+    for (const c of changes) {
+        if (c.kind !== 'edit') { continue };
+        if (!c.file.startsWith('modules/') || !c.file.endsWith('.module.luau')) { continue };
 
-        const sibling = p.replace(/\.module\.luau$/, '.module.lua');
+        const sibling = c.file.replace(/\.module\.luau$/, '.module.lua');
         if (!fs.existsSync(path.join(workspace, sibling))) { continue };
 
-        if (!seen.has(sibling)) {
-            seen.add(sibling);
-            out.push(sibling);
+        const key = `edit:${sibling}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            out.push({ file: sibling, kind: 'edit' });
         };
     };
 
     return out;
 };
 
-async function list_changed_paths(opts : { workspace : string, sync_all : boolean; ign : Ignore }) : Promise<string[]> {
-    const { workspace, sync_all, ign } = opts;
+function changes_from_gh_files(files : gh_file[], delete_removed : boolean) : path_change[] {
+    const out : path_change[] = [];
+
+    for (const f of files) {
+        const filename = f.filename;
+
+        if (!filename) { continue };
+
+        const status = f.status ?? '';
+
+        if (status === 'removed') {
+            if (delete_removed) { out.push({ file: filename, kind: 'delete' }) };
+            continue;
+        };
+
+        if (status === 'renamed') {
+            if (delete_removed && f.previous_filename) {
+                out.push({ file: f.previous_filename, kind: 'delete' });
+            };
+
+            out.push({ file: filename, kind: 'edit' });
+            continue;
+        };
+
+        out.push({ file: filename, kind: 'edit' });
+    };
+
+    return out;
+};
+
+function filter_reorg_deletes(delete_files : string[], workspace : string) : string[] {
+    const by_parent = new Map<string, string[]>();
+
+    for (const file of delete_files) {
+        const parent = path.posix.dirname(file);
+        const list = by_parent.get(parent) ?? [];
+        
+        list.push(file);
+        by_parent.set(parent, list);
+    };
+
+    const kept : string[] = [];
+
+    for (const [parent, files] of by_parent) {
+        if (!prefix_has_remaining_files(workspace, parent)) {
+            core.warning(`WikiWire: skipping ${files.length} delete(s) under ${parent}/ (folder removed; treating as reorg)`);
+            continue;
+        };
+
+        const parts = parent.split('/');
+
+        if (parts.length >= 2 && (REPO_ROOTS as readonly string[]).includes(parts[0])) {
+            const segment_dir = `${parts[0]}/${parts[1]}`;
+
+            if (!prefix_has_remaining_files(workspace, segment_dir)) {
+                core.warning(`WikiWire: skipping ${files.length} delete(s) under ${segment_dir}/ (folder removed; treating as reorg)`);
+                continue;
+            };
+        };
+
+        kept.push(...files);
+    };
+
+    return kept;
+};
+
+async function list_changed_paths(opts : { workspace : string; sync_all : boolean; ign : Ignore; delete_removed : boolean }) : Promise<path_change[]> {
+    const { workspace, sync_all, ign, delete_removed } = opts;
 
     if (sync_all) {
         const out: string[] = [];
@@ -110,7 +201,9 @@ async function list_changed_paths(opts : { workspace : string, sync_all : boolea
             walk_files(path.join(workspace, root), workspace, out);
         };
 
-        return out.filter((f) => !ign.ignores(f));
+        return out
+            .filter((f) => !ign.ignores(f))
+            .map((file) => ({ file, kind: 'edit' as const }));
     };
 
     const token = process.env.GITHUB_TOKEN;
@@ -123,31 +216,25 @@ async function list_changed_paths(opts : { workspace : string, sync_all : boolea
     const after = payload.after ?? github.context.sha;
     const before = payload.before ?? '';
 
-    let filenames : string[] = [];
+    let gh_files : gh_file[] = [];
 
     if (is_zero_sha(before)) {
         const { data } = await octokit.rest.repos.getCommit({ owner, repo, ref: after });
-
-        filenames = (data.files ?? [])
-            .map((f: { filename ?: string | null }) => f.filename)
-            .filter(Boolean) as string[];
-        } else {
+        gh_files = data.files ?? [];
+    } else {
         const { data } = await octokit.rest.repos.compareCommits({
             owner,
             repo,
             base: before,
             head: after,
         });
-
-        filenames = (data.files ?? [])
-            .filter((f: { status ?: string | null }) => f.status !== 'removed')
-            .map((f: { filename ?: string | null }) => f.filename)
-            .filter(Boolean) as string[];
+        gh_files = data.files ?? [];
     };
 
-    filenames = add_sibling_lua_paths(filenames, workspace);
+    let changes = changes_from_gh_files(gh_files, delete_removed);
+    changes = add_sibling_lua_edits(changes, workspace);
 
-    return filenames.filter((f) => !ign.ignores(f));
+    return changes.filter((c) => !ign.ignores(c.file));
 };
 
 async function run() : Promise<void> {
@@ -157,6 +244,7 @@ async function run() : Promise<void> {
     const config_path = core.getInput('config_path') || 'wikiwire.toml';
     const ignore_path = core.getInput('ignore_path') || '.wikiwireignore';
     const input_dry = core.getInput('dry_run') === 'true';
+    const input_delete_removed = core.getInput('delete_removed') === 'true';
     const sync_all = core.getInput('sync_all') === 'override';
 
     if (!sync_all && github.context.eventName !== 'push') { throw new Error( 'WikiWire: No context/commit data provideed. Use `sync_all: "override"` when the event is not a `push` (e.g. workflow_dispatch).', ); };
@@ -166,12 +254,11 @@ async function run() : Promise<void> {
 
     if (!fs.existsSync(full_config)) { throw new Error(`WikiWire config error: config not found: ${full_config}`); };
 
-    const { sites, shared : shared_enabled, common : common_enabled, ignore_content_model_errors, path_to_site } = load_config(full_config);
+    const { sites, shared : shared_enabled, common : common_enabled, ignore_content_model_errors, delete_removed : config_delete_removed, path_to_site } = load_config(full_config);
+    const delete_removed = input_delete_removed || config_delete_removed;
 
     for (const cred_site_id of site_creds_map.keys()) {
-        if (!sites.has(cred_site_id)) {
-            core.warning( `WikiWire: parameter \`site_credentials\` has key "${cred_site_id}" which is not a site id listed in wikiwire.toml` );
-        };
+        if (!sites.has(cred_site_id)) { core.warning( `WikiWire: parameter \`site_credentials\` has key "${cred_site_id}" which is not a site id listed in wikiwire.toml` ); };
     };
 
     let ign : Ignore = ignore();
@@ -182,11 +269,18 @@ async function run() : Promise<void> {
         ign = ign.add(fs.readFileSync(full_ignore, 'utf8'));
     };
 
-    const changed = await list_changed_paths({ workspace, sync_all, ign });
+    const changed = await list_changed_paths({ workspace, sync_all, ign, delete_removed });
+
+    const delete_candidates = changed.filter((c) => c.kind === 'delete').map((c) => c.file);
+    const allowed_deletes = new Set(filter_reorg_deletes(delete_candidates, workspace));
 
     const jobs : sync_job[] = [];
 
-    for (const file of changed) {
+    for (const change of changed) {
+        const file = change.file;
+        const kind = change.kind === 'delete' && allowed_deletes.has(file) ? 'delete' : change.kind === 'delete' ? null : 'edit';
+        if (!kind) { continue };
+
         if (!REPO_ROOTS.some((root) => file.startsWith(`${root}/`))) { continue };
 
         const parts = file.split('/').filter(Boolean);
@@ -200,7 +294,7 @@ async function run() : Promise<void> {
 
             const full_file = path.join(workspace, file);
 
-            if (!fs.existsSync(full_file)) { core.info(`WikiWire: skip missing or removed file ${file}`); continue };
+            if (kind === 'edit' && !fs.existsSync(full_file)) { core.info(`WikiWire: skip missing or removed file ${file}`); continue };
 
             const ref = github.context.ref;
 
@@ -216,7 +310,7 @@ async function run() : Promise<void> {
                     continue;
                 };
 
-                jobs.push({ file, mapped, site_cfg });
+                jobs.push({ file, mapped, site_cfg, kind });
             };
 
             continue;
@@ -229,7 +323,7 @@ async function run() : Promise<void> {
         if (site_cfg.default_branch && ref !== `refs/heads/${site_cfg.default_branch}`) { core.info(`WikiWire: skipping ${file} (ref ${ref} is not refs/heads/${site_cfg.default_branch})`); continue };
 
         const full_file = path.join(workspace, file);
-        if (!fs.existsSync(full_file)) { core.info(`WikiWire: skipping missing or removed file ${file}`); continue };
+        if (kind === 'edit' && !fs.existsSync(full_file)) { core.info(`WikiWire: skipping missing or removed file ${file}`); continue };
 
         const mapped = map_repo_path(file, { css_content_model: site_cfg.css_content_model, ignore_content_model_errors });
         if (!mapped) {
@@ -237,7 +331,7 @@ async function run() : Promise<void> {
             continue;
         };
 
-        jobs.push({ file, mapped, site_cfg });
+        jobs.push({ file, mapped, site_cfg, kind });
     };
 
     if (jobs.length === 0) { core.info('WikiWire: nothing to sync'); return };

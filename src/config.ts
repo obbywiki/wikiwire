@@ -32,10 +32,11 @@ type root_config = {
   shared ?: unknown;
   common ?: unknown;
   ignore_content_model_errors ?: unknown;
+  delete_removed ?: unknown;
   sites ?: unknown;
 };
 
-export function load_config(config_path : string) : { schema_version : number; shared : boolean; common : boolean; ignore_content_model_errors : boolean; sites : Map<string, site_config>; path_to_site : Map<string, site_config> } {
+export function load_config(config_path : string) : { schema_version : number; shared : boolean; common : boolean; ignore_content_model_errors : boolean; delete_removed : boolean; sites : Map<string, site_config>; path_to_site : Map<string, site_config> } {
     const raw = fs.readFileSync(config_path, 'utf8');
     const data = TOML.parse(raw) as root_config;
 
@@ -113,6 +114,7 @@ export function load_config(config_path : string) : { schema_version : number; s
         shared: shared_enabled,
         common: common_enabled,
         ignore_content_model_errors: Boolean(data.ignore_content_model_errors),
+        delete_removed: Boolean(data.delete_removed),
         sites,
         path_to_site
     };

@@ -38,6 +38,20 @@ If true, files under `modules/`, `templates/`, or `mediawiki/` with unsupported 
 ignore_content_model_errors = true
 ```
 
+## delete_removed (boolean)
+
+If true, WikiWire deletes on-wiki pages when the corresponding repo files are removed in a push diff. Also enabled when the GitHub Action input `delete_removed` is `true`. Default false.
+
+Removing an entire folder (no remaining files under that directory, or under `modules|templates|mediawiki/<segment>/`) is treated as a repository reorganization: those deletes are skipped with a warning. Individual file removals where siblings remain still delete.
+
+`sync_all: override` never performs deletes. Ignored paths are never deleted on the wiki.
+
+Requires the bot password grant **Delete pages, revisions, and log entries**, and a wiki account with the `delete` right (often `sysop`).
+
+```
+delete_removed = true
+```
+
 ## [[sites]] (repeatable) (required)
 
 A `[[sites]]` defines a site. At minimum one of these entries must be provided.
@@ -56,7 +70,7 @@ Full MediaWiki API URL, e.g. https://example.org/w/api.php.
 
 ### dry_run (boolean)
 
-If true, only log planned edits; no action=edit requests for this site.
+If true, only log planned edits/deletes; no write requests for this site.
 
 ### default_branch (string)
 
@@ -133,7 +147,8 @@ With the config above, content under `modules/shared-lang/`, `templates/shared-l
 | `site_credentials` | no | `""` | JSON object whose keys are site `id` values from `wikiwire.toml` (not `host`). Each value must be `{"username":"…","password":"…"}`. Overrides the global `username` / `password` for that site. Keys that do not match any configured site produce a workflow warning. |
 | `config_path` | no | `wikiwire.toml` | Path to the TOML config. |
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
-| `dry_run` | no | `false` | If `true`, no edits are sent (site-level `dry_run` in TOML still applies per site). |
+| `dry_run` | no | `false` | If `true`, no edits or deletes are sent (site-level `dry_run` in TOML still applies per site). |
+| `delete_removed` | no | `false` | If `true`, delete on-wiki pages when repo files are removed (also enabled by `delete_removed` in `wikiwire.toml`). Entire-folder removals are skipped. Requires special permissions. |
 | `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, and `mediawiki/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
 
 `dark_lua_compat` was removed in WikiWire v0.3.0, and supplying it as a parameter will produce an error.

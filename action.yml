@@ -26,7 +26,11 @@ inputs:
     required: false
     default: .wikiwireignore
   dry_run:
-    description: If true, log edits only and do not call the MediaWiki API
+    description: If true, log edits/deletes only and do not call the MediaWiki API
+    required: false
+    default: "false"
+  delete_removed:
+    description: If true, delete on-wiki pages when corresponding repo files are removed. Entire folder removals are skipped. Requires special permissions.
     required: false
     default: "false"
   sync_all:

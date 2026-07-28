@@ -36,7 +36,7 @@ jobs:
       - uses: obbywiki/wikiwire@latest
         with:
           dry_run: true
-          sync_all: override
+          # sync_all: override # optional
 ```
 
 Successful runs log lines like `WikiWire: [dry-run] would edit Module:MyModule on mywiki <= modules/mywikidomain.org/MyModule/MyModule.module.lua`.

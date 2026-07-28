@@ -168,6 +168,12 @@ Next, navigate to `Special:BotPasswords` and create a bot password with the foll
 * Edit protected pages
 * Create, edit, and move pages
 
+If you enable `delete_removed` (see configuration), also grant:
+
+* Delete pages, revisions, and log entries
+
+The bot account usually needs the wiki `delete` right as well (often via the `sysop` group).
+
 You may also optionally enable:
 
 * Edit the MediaWiki namespace and sitewide/user JSON
@@ -336,6 +342,7 @@ Place at the repository root unless you override with the `config_path` action i
 | `shared` | boolean | no | If true, enables `modules/shared/`, `templates/shared/`, and `mediawiki/shared/`, synced to every `[[sites]]` entry. Default false. |
 | `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, and `mediawiki/common/`. Synced only to `[[sites]]` entries with `common = true`. Default false. |
 | `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Default false. |
+| `delete_removed` | boolean | no | If true, delete on-wiki pages when the corresponding repo files are removed in a push. Also enabled by the action input of the same name. Removing an entire folder is treated as a reorganization and does **not** mass-delete. Default false. |
 
 ### `[[sites]]` (repeatable)
 
@@ -344,7 +351,7 @@ Place at the repository root unless you override with the `config_path` action i
 | `id` | string | yes | Stable site key (sessions, logs). Must be unique across rows. |
 | `host` | string | no | Directory name under `modules/`, `templates/`, and `mediawiki/`. If omitted, defaults to `id`. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` value because those names are reserved for shared site groups. |
 | `api` | string | yes | Full MediaWiki API URL, e.g. `https://example.org/w/api.php`. |
-| `dry_run` | boolean | no | If true, only log planned edits; no `action=edit` requests for this site. |
+| `dry_run` | boolean | no | If true, only log planned edits/deletes; no write requests for this site. |
 | `default_branch` | string | no | If set, the action skips syncing when the workflow ref is not this branch (e.g. `refs/heads/main`). |
 | `css_content_model` | string | no | Content model for `*.css` files under `modules/`, `templates/`, and `mediawiki/`. Default `sanitized-css`. Some wikis need `css`. |
 | `common` | boolean | no | If true, this site receives content from `modules/common/`, `templates/common/`, and `mediawiki/common/` when top-level `common = true`. Default false. |
@@ -412,7 +419,8 @@ Please note that WikiWire is currently a BETA and this shouldn't be required in 
 | `site_credentials` | no | `""` | JSON object whose keys are site `id` values from `wikiwire.toml` (not `host`). Each value must be `{"username":"…","password":"…"}`. Overrides the global `username` / `password` for that site. Keys that do not match any configured site produce a workflow warning. |
 | `config_path` | no | `wikiwire.toml` | Path to the TOML config. |
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
-| `dry_run` | no | `false` | If `true`, no edits are sent (site-level `dry_run` in TOML still applies per site). |
+| `dry_run` | no | `false` | If `true`, no edits or deletes are sent (site-level `dry_run` in TOML still applies per site). |
+| `delete_removed` | no | `false` | If `true`, delete on-wiki pages when repo files are removed (also enabled by `delete_removed` in `wikiwire.toml`). Entire-folder removals are skipped. Requires special permissions. |
 | `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, and `mediawiki/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
 
 `dark_lua_compat` was removed in WikiWire v0.3.0, and supplying it as a parameter will produce an error.
@@ -453,8 +461,8 @@ jobs:
 
 ## Limitations
 
-- **Deletes:** Removing a file from git does **not** delete the wiki page.
-- **Renames:** Appear as delete + add; see deletes.
+- **Deletes:** Off by default. With `delete_removed` enabled (TOML or action input), removing an individual file deletes the corresponding wiki page. Removing an entire folder is treated as a reorganization and does **not** mass-delete wiki pages. `sync_all` never deletes.
+- **Renames:** Treated as deletes + adds, if enabled. Does not add a redirect.
 - **Initial push:** When GitHub sends an all-zero `before` SHA, the action uses the single `push` head commit’s file list instead of `compareCommits`.
 - **Branches:** Use per-site `default_branch` or workflow `on.push.branches` to avoid syncing from unintended branches.
 

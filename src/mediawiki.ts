@@ -9,12 +9,14 @@ type mw_query = {
 
 type mw_login = { result ?: string; token ?: string };
 type mw_edit = { result ?: string };
+type mw_delete = { title ?: string; reason ?: string; logid ?: number };
 type mw_error = { code ?: string; info ?: string };
 
 type mw_api_res = {
     query ?: mw_query;
     login ?: mw_login;
     edit ?: mw_edit;
+    delete ?: mw_delete;
     error ?: mw_error;
 };
 
@@ -214,5 +216,34 @@ export class mw_session {
         if (!edit || edit.result != 'Success') { throw new Error(`WikiWire API error: edit ${title}: unexpected response ${JSON.stringify(data)}`); };
 
         // no return expected
+    };
+
+    // returns true if deleted, false if page was already missing
+    async delete(title : string, reason : string) : Promise<boolean> {
+        if (!this.csrftoken) { throw new Error('WikiWire API error: not logged in (missing CSRF token)'); };
+
+        const exists = await this.page_exists(title);
+        if (!exists) { return false };
+
+        const data = await this._post({
+            action: 'delete',
+            title,
+            reason,
+            token: this.csrftoken,
+            bot: '1',
+        });
+
+        if (data.error) {
+            const err = data.error;
+            const code = err.code ?? '';
+
+            if (code === 'missingtitle' || code === 'pagedeleted') { return false };
+
+            throw new Error(`WikiWire API error: delete ${title}: ${code || '?'} ${err.info ?? ''}`);
+        };
+
+        if (!data.delete) { throw new Error(`WikiWire API error: delete ${title}: unexpected response ${JSON.stringify(data)}`); };
+
+        return true;
     };
 };

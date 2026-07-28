@@ -170,6 +170,12 @@ Next, navigate to `Special:BotPasswords` and create a bot password with the foll
 * Edit protected pages
 * Create, edit, and move pages
 
+If you enable `delete_removed` (see configuration), also grant:
+
+* Delete pages, revisions, and log entries
+
+The bot account usually needs the wiki `delete` right as well (often via the `sysop` group).
+
 You may also optionally enable:
 
 * Edit the MediaWiki namespace and sitewide/user JSON
