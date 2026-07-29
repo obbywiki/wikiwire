@@ -377,6 +377,21 @@ async function run() : Promise<void> {
     for (const job of jobs) {
         const dry = input_dry || job.site_cfg.dry_run;
 
+        if (job.kind === 'delete') {
+            if (dry) { core.info( `WikiWire: [dry-run] would delete ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` ); continue };
+
+            const session = await get_session(job.site_cfg.id);
+            const deleted = await session.delete(job.mapped.title, `WikiWire: delete ${job.file}`);
+
+            if (deleted) {
+                core.info(`WikiWire: deleted ${job.mapped.title} on ${job.site_cfg.id}`);
+            } else {
+                core.info(`WikiWire: skipped delete of ${job.mapped.title} on ${job.site_cfg.id} (page already missing)`);
+            };
+
+            continue;
+        };
+
         if (dry) { core.info( `WikiWire: [dry-run] would edit ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` ); continue };
 
         const session = await get_session(job.site_cfg.id);
