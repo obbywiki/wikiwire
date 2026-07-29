@@ -30,7 +30,7 @@ inputs:
     required: false
     default: "false"
   delete_removed:
-    description: If true, delete on-wiki pages when corresponding repo files are removed. Entire folder removals are skipped. Requires special permissions.
+    description: If true, delete on-wiki pages when corresponding repo files are removed. Removing a whole site or shared directory is skipped as a reorganization. Requires special permissions.
     required: false
     default: "false"
   sync_all:

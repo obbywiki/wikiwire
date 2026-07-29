@@ -155,34 +155,34 @@ function changes_from_gh_files(files : gh_file[], delete_removed : boolean) : pa
     return out;
 };
 
+function site_segment_dir(file : string) : string | null {
+    const parts = file.split('/').filter(Boolean);
+
+    if (parts.length < 3) { return null };
+    if (!(REPO_ROOTS as readonly string[]).includes(parts[0])) { return null };
+
+    return `${parts[0]}/${parts[1]}`;
+};
+
 function filter_reorg_deletes(delete_files : string[], workspace : string) : string[] {
-    const by_parent = new Map<string, string[]>();
-
-    for (const file of delete_files) {
-        const parent = path.posix.dirname(file);
-        const list = by_parent.get(parent) ?? [];
-        
-        list.push(file);
-        by_parent.set(parent, list);
-    };
-
+    const by_segment = new Map<string, string[]>();
     const kept : string[] = [];
 
-    for (const [parent, files] of by_parent) {
-        if (!prefix_has_remaining_files(workspace, parent)) {
-            core.warning(`WikiWire: skipping ${files.length} delete(s) under ${parent}/ (folder removed; treating as reorg)`);
+    for (const file of delete_files) {
+        const segment_dir = site_segment_dir(file);
+
+        if (!segment_dir) { kept.push(file); continue };
+
+        const list = by_segment.get(segment_dir) ?? [];
+
+        list.push(file);
+        by_segment.set(segment_dir, list);
+    };
+
+    for (const [segment_dir, files] of by_segment) {
+        if (!prefix_has_remaining_files(workspace, segment_dir)) {
+            core.warning(`WikiWire: skipping ${files.length} delete(s) under ${segment_dir}/ (site directory removed; treating as reorg)`);
             continue;
-        };
-
-        const parts = parent.split('/');
-
-        if (parts.length >= 2 && (REPO_ROOTS as readonly string[]).includes(parts[0])) {
-            const segment_dir = `${parts[0]}/${parts[1]}`;
-
-            if (!prefix_has_remaining_files(workspace, segment_dir)) {
-                core.warning(`WikiWire: skipping ${files.length} delete(s) under ${segment_dir}/ (folder removed; treating as reorg)`);
-                continue;
-            };
         };
 
         kept.push(...files);

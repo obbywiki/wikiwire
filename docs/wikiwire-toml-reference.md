@@ -42,7 +42,7 @@ ignore_content_model_errors = true
 
 If true, WikiWire deletes on-wiki pages when the corresponding repo files are removed in a push diff. Also enabled when the GitHub Action input `delete_removed` is `true`. Default false.
 
-Removing an entire folder (no remaining files under that directory, or under `modules|templates|mediawiki/<segment>/`) is treated as a repository reorganization: those deletes are skipped with a warning. Individual file removals where siblings remain still delete.
+Removing a whole site or shared directory (`modules/<host>/`, `templates/shared/`, `mediawiki/shared-lang/`, and so on, with no files left under it) is treated as a repository reorganization: those deletes are skipped with a warning. Removing individual files, including the last file of a module or subpage folder, still deletes the corresponding pages.
 
 `sync_all: override` never performs deletes. Ignored paths are never deleted on the wiki.
 

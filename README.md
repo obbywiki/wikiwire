@@ -342,7 +342,7 @@ Place at the repository root unless you override with the `config_path` action i
 | `shared` | boolean | no | If true, enables `modules/shared/`, `templates/shared/`, and `mediawiki/shared/`, synced to every `[[sites]]` entry. Default false. |
 | `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, and `mediawiki/common/`. Synced only to `[[sites]]` entries with `common = true`. Default false. |
 | `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Default false. |
-| `delete_removed` | boolean | no | If true, delete on-wiki pages when the corresponding repo files are removed in a push. Also enabled by the action input of the same name. Removing an entire folder is treated as a reorganization and does **not** mass-delete. Default false. |
+| `delete_removed` | boolean | no | If true, delete on-wiki pages when the corresponding repo files are removed in a push. Also enabled by the action input of the same name. Removing a whole site or shared directory (e.g. `modules/<host>/`) is treated as a reorganization and does **not** mass-delete every module/template underneath it. Default false. |
 
 ### `[[sites]]` (repeatable)
 
@@ -461,7 +461,7 @@ jobs:
 
 ## Limitations
 
-- **Deletes:** Off by default. With `delete_removed` enabled (TOML or action input), removing an individual file deletes the corresponding wiki page. Removing an entire folder is treated as a reorganization and does **not** mass-delete wiki pages. `sync_all` never deletes.
+- **Deletes:** Off by default. With `delete_removed` enabled (wikiwire.toml or action input), removing an individual file deletes the corresponding wiki page. Removing a whole site or shared directory (e.g. `modules/<host>/` or `templates/shared/`) is treated as a reorganization and does **not** mass-delete wiki pages. `sync_all` never deletes.
 - **Renames:** Treated as deletes + adds, if enabled. Does not add a redirect.
 - **Initial push:** When GitHub sends an all-zero `before` SHA, the action uses the single `push` head commit’s file list instead of `compareCommits`.
 - **Branches:** Use per-site `default_branch` or workflow `on.push.branches` to avoid syncing from unintended branches.
