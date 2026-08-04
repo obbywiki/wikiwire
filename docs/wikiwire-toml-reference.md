@@ -52,6 +52,20 @@ Requires the bot password grant **Delete pages, revisions, and log entries**, an
 delete_removed = true
 ```
 
+## infer_page_existence (boolean)
+
+If true, push-diff syncs (any sync job that doesn't use `sync_all`) skip the MediaWiki `page_exists` probe when GitHub reports a clear create vs modify status, roughly halving Action API round-trips per page which results in 2x speeds. Default false.
+
+- `modified` / `changed`: edit with `nocreate` (no `contentmodel`). If the page is missing on-wiki, WikiWire retries as a create with `contentmodel`.
+- `added` / `renamed` / `copied`: edit with `contentmodel` and `createonly`. If the page already exists, WikiWire retries as a plain edit.
+- Deletes skip the existence probe and treat already-missing pages as a no-op.
+
+`sync_all: override`, sibling `.module.lua` injects, and any path without a known GitHub status still use the `page_exists` probe. Fallback retries are always logged.
+
+```
+infer_page_existence = true
+```
+
 ## [[sites]] (repeatable) (required)
 
 A `[[sites]]` defines a site. At minimum one of these entries must be provided.
@@ -155,4 +169,4 @@ With the config above, content under `modules/shared-lang/`, `templates/shared-l
 
 Use a workflow `permissions` block with at least `contents: read` so the default `GITHUB_TOKEN` can call the compare API.
 
-Every site that performs a real (non–dry-run) sync must resolve to a username and password: either the global inputs or a matching entry in `site_credentials`.
+Every site that performs a real (non-dry-run) sync must resolve to a username and password: either the global inputs or a matching entry in `site_credentials`.

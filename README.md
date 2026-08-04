@@ -343,6 +343,7 @@ Place at the repository root unless you override with the `config_path` action i
 | `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, and `mediawiki/common/`. Synced only to `[[sites]]` entries with `common = true`. Default false. |
 | `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Default false. |
 | `delete_removed` | boolean | no | If true, delete on-wiki pages when the corresponding repo files are removed in a push. Also enabled by the action input of the same name. Removing a whole site or shared directory (e.g. `modules/<host>/`) is treated as a reorganization and does **not** mass-delete every module/template underneath it. Default false. |
+| `infer_page_existence` | boolean | no | If true, push-diff syncs (any sync job that doesn't use `sync_all`) skip the MediaWiki `page_exists` probe when GitHub reports a clear create vs modify status, roughly halving Action API round-trips per page which results in 2x speeds. Default false. |
 
 ### `[[sites]]` (repeatable)
 
@@ -427,7 +428,7 @@ Please note that WikiWire is currently a BETA and this shouldn't be required in 
 
 Use a workflow `permissions` block with at least `contents: read` so the default `GITHUB_TOKEN` can call the compare API.
 
-Every site that performs a real (non–dry-run) sync must resolve to a username and password: either the global inputs or a matching entry in `site_credentials`.
+Every site that performs a real (non-dry-run) sync must resolve to a username and password: either the global inputs or a matching entry in `site_credentials`.
 
 ### Example workflow
 

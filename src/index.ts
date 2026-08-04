@@ -6,7 +6,7 @@ import ignore from 'ignore';
 
 import { load_config, type site_config } from './config';
 import { map_repo_path, parse_shared_path_segment, type mapped_path } from './paths';
-import { mw_session } from './mediawiki';
+import { mw_session, type existence_hint } from './mediawiki';
 import { parse_site_credentials } from './site_credentials';
 
 import type { Ignore } from 'ignore';
@@ -15,9 +15,12 @@ const REPO_ROOTS = ['modules', 'templates', 'mediawiki'] as const;
 
 type push_payload = { after ?: string; before ?: string };
 
+type git_status = 'added' | 'modified' | 'changed' | 'renamed' | 'removed' | 'copied' | 'unknown';
+
 type path_change = {
     file : string;
     kind : 'edit' | 'delete';
+    git_status : git_status;
 };
 
 type sync_job = {
@@ -25,6 +28,7 @@ type sync_job = {
     mapped : mapped_path;
     site_cfg : site_config;
     kind : 'edit' | 'delete';
+    git_status : git_status;
 };
 
 type gh_file = {
@@ -118,11 +122,28 @@ function add_sibling_lua_edits(changes : path_change[], workspace : string) : pa
         const key = `edit:${sibling}`;
         if (!seen.has(key)) {
             seen.add(key);
-            out.push({ file: sibling, kind: 'edit' });
+            out.push({ file: sibling, kind: 'edit', git_status: 'unknown' });
         };
     };
 
     return out;
+};
+
+function normalize_git_status(status : string) : git_status {
+    if ( status === 'added' || status === 'modified' || status === 'changed' || status === 'renamed' || status === 'removed' || status === 'copied' ) {
+        return status;
+    };
+
+    return 'unknown';
+};
+
+function existence_hint_for(git_status : git_status, infer_page_existence : boolean) : existence_hint {
+    if (!infer_page_existence) { return 'probe' };
+
+    if (git_status === 'modified' || git_status === 'changed') { return 'assume_exists' };
+    if (git_status === 'added' || git_status === 'renamed' || git_status === 'copied') { return 'assume_create' };
+
+    return 'probe';
 };
 
 function changes_from_gh_files(files : gh_file[], delete_removed : boolean) : path_change[] {
@@ -134,22 +155,23 @@ function changes_from_gh_files(files : gh_file[], delete_removed : boolean) : pa
         if (!filename) { continue };
 
         const status = f.status ?? '';
+        const git_status = normalize_git_status(status);
 
         if (status === 'removed') {
-            if (delete_removed) { out.push({ file: filename, kind: 'delete' }) };
+            if (delete_removed) { out.push({ file: filename, kind: 'delete', git_status: 'removed' }) };
             continue;
         };
 
         if (status === 'renamed') {
             if (delete_removed && f.previous_filename) {
-                out.push({ file: f.previous_filename, kind: 'delete' });
+                out.push({ file: f.previous_filename, kind: 'delete', git_status: 'removed' });
             };
 
-            out.push({ file: filename, kind: 'edit' });
+            out.push({ file: filename, kind: 'edit', git_status: 'renamed' });
             continue;
         };
 
-        out.push({ file: filename, kind: 'edit' });
+        out.push({ file: filename, kind: 'edit', git_status });
     };
 
     return out;
@@ -203,7 +225,7 @@ async function list_changed_paths(opts : { workspace : string; sync_all : boolea
 
         return out
             .filter((f) => !ign.ignores(f))
-            .map((file) => ({ file, kind: 'edit' as const }));
+            .map((file) => ({ file, kind: 'edit' as const, git_status: 'unknown' as const }));
     };
 
     const token = process.env.GITHUB_TOKEN;
@@ -254,7 +276,7 @@ async function run() : Promise<void> {
 
     if (!fs.existsSync(full_config)) { throw new Error(`WikiWire config error: config not found: ${full_config}`); };
 
-    const { sites, shared : shared_enabled, common : common_enabled, ignore_content_model_errors, delete_removed : config_delete_removed, path_to_site } = load_config(full_config);
+    const { sites, shared : shared_enabled, common : common_enabled, ignore_content_model_errors, delete_removed : config_delete_removed, infer_page_existence, path_to_site } = load_config(full_config);
     const delete_removed = input_delete_removed || config_delete_removed;
 
     for (const cred_site_id of site_creds_map.keys()) {
@@ -310,7 +332,7 @@ async function run() : Promise<void> {
                     continue;
                 };
 
-                jobs.push({ file, mapped, site_cfg, kind });
+                jobs.push({ file, mapped, site_cfg, kind, git_status: change.git_status });
             };
 
             continue;
@@ -331,7 +353,7 @@ async function run() : Promise<void> {
             continue;
         };
 
-        jobs.push({ file, mapped, site_cfg, kind });
+        jobs.push({ file, mapped, site_cfg, kind, git_status: change.git_status });
     };
 
     if (jobs.length === 0) { core.info('WikiWire: nothing to sync'); return };
@@ -376,12 +398,15 @@ async function run() : Promise<void> {
 
     for (const job of jobs) {
         const dry = input_dry || job.site_cfg.dry_run;
+        const existence = existence_hint_for(job.git_status, infer_page_existence);
 
         if (job.kind === 'delete') {
             if (dry) { core.info( `WikiWire: [dry-run] would delete ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` ); continue };
 
             const session = await get_session(job.site_cfg.id);
-            const deleted = await session.delete(job.mapped.title, `WikiWire: delete ${job.file}`);
+            const deleted = await session.delete(job.mapped.title, `WikiWire: delete ${job.file}`, {
+                probe: !(infer_page_existence && job.git_status === 'removed'),
+            });
 
             if (deleted) {
                 core.info(`WikiWire: deleted ${job.mapped.title} on ${job.site_cfg.id}`);
@@ -397,7 +422,10 @@ async function run() : Promise<void> {
         const session = await get_session(job.site_cfg.id);
         const text = fs.readFileSync(path.join(workspace, job.file), 'utf8');
 
-        await session.edit( job.mapped.title, text, `WikiWire: sync ${job.file}`, job.mapped.content_model );
+        const result = await session.edit( job.mapped.title, text, `WikiWire: sync ${job.file}`, job.mapped.content_model, existence );
+
+        if (result.fallback) { core.info( `WikiWire: existence inference missed for ${job.mapped.title} on ${job.site_cfg.id} (git_status=${job.git_status}); retried successfully` ); };
+
         core.info(`WikiWire: updated ${job.mapped.title} on ${job.site_cfg.id}`);
     };
 };

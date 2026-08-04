@@ -20,6 +20,11 @@ type mw_api_res = {
     error ?: mw_error;
 };
 
+export type existence_hint = 'probe' | 'assume_exists' | 'assume_create';
+
+export type edit_result = {
+    fallback : boolean;
+};
 
 function api_url_for_log(api_url : string) : string {
     try {
@@ -48,6 +53,21 @@ function get_set_cookie_lines(headers : Headers) : string[] {
     const sc = headers.get('set-cookie');
 
     return sc ? [sc] : [];
+};
+
+function is_missing_page_edit_error(code : string) : boolean {
+    return code === 'missingtitle' || code === 'nocreate-missing' || code === 'edit-no-create';
+};
+
+function is_createonly_conflict_error(code : string) : boolean {
+    return (
+        code === 'articleexists' ||
+        code === 'edit-alreadyexists' ||
+        code === 'badcontentmodel' ||
+        code === 'invalid-contentmodel' ||
+        code === 'changecontentmodel-cannot-convert' ||
+        code === 'nochangecontentmodel'
+    );
 };
 
 export class mw_session {
@@ -128,7 +148,6 @@ export class mw_session {
             if (res.status === 403) {
                 hint =
                 ' (please refer to the WikWire documentation on 403 error codes https://github.com/obbywiki/wikiwire)';
-                // ' (403 usually means the HTTP layer blocked the request—wrong URL, bot/WAF rules, IP allowlist, or missing Host/HTTPS—not a MediaWiki API error code. If your wiki is behind a service like Cloudflare and its Bot Fight Mode, you may need to disable it or programmatically enable access overwrites with something like xiaotianxt/bypass-cloudflare-for-github-action)';
             };
 
             throw new Error(`WikiWire debug: ${scope.join('; ')}. ${body_note}${hint}`);
@@ -192,11 +211,28 @@ export class mw_session {
         return Boolean(page && !page.missing);
     };
 
-    async edit(title : string, text : string, summary : string, content_model : string) : Promise<void> {
+    async _edit_once(params : Record<string, string>) : Promise<mw_api_res> {
+        const data = await this._post(params);
+
+        if (data.error) { return data };
+
+        const edit = data.edit;
+
+        if (!edit || edit.result != 'Success') { throw new Error(`WikiWire API error: edit ${params.title}: unexpected response ${JSON.stringify(data)}`); };
+
+        return data;
+    };
+
+    async edit(
+        title : string,
+        text : string,
+        summary : string,
+        content_model : string,
+        existence : existence_hint = 'probe',
+    ) : Promise<edit_result> {
         if (!this.csrftoken) { throw new Error('WikiWire API error: not logged in (missing CSRF token)'); };
 
-        const exists = await this.page_exists(title);
-        const params: Record<string, string> = {
+        const base : Record<string, string> = {
             action: 'edit',
             title,
             text,
@@ -205,25 +241,74 @@ export class mw_session {
             bot: '1',
         };
 
-        if (!exists) { params.contentmodel = content_model; };
+        if (existence === 'probe') {
+            const exists = await this.page_exists(title);
+            const params = { ...base };
 
-        const data = await this._post(params);
+            if (!exists) { params.contentmodel = content_model };
 
-        if (data.error) { const err = data.error; throw new Error(`WikiWire API error: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`); };
+            const data = await this._edit_once(params);
 
-        const edit = data.edit;
+            if (data.error) {
+                const err = data.error;
+                throw new Error(`WikiWire API error: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`);
+            };
 
-        if (!edit || edit.result != 'Success') { throw new Error(`WikiWire API error: edit ${title}: unexpected response ${JSON.stringify(data)}`); };
+            return { fallback: false };
+        };
 
-        // no return expected
+        if (existence === 'assume_exists') {
+            const first = await this._edit_once({ ...base, nocreate: '1' });
+
+            if (!first.error) { return { fallback: false } };
+
+            const code = first.error.code ?? '';
+
+            if (!is_missing_page_edit_error(code)) {
+                throw new Error(`WikiWire API error: edit ${title}: ${code || '?'} ${first.error.info ?? ''}`);
+            };
+
+            const retry = await this._edit_once({ ...base, contentmodel: content_model });
+
+            if (retry.error) {
+                const err = retry.error;
+                throw new Error(`WikiWire API error: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`);
+            };
+
+            return { fallback: true };
+        };
+
+        // assume_create
+        const first = await this._edit_once({ ...base, contentmodel: content_model, createonly: '1' });
+
+        if (!first.error) { return { fallback: false } };
+
+        const code = first.error.code ?? '';
+
+        if (!is_createonly_conflict_error(code)) {
+            throw new Error(`WikiWire API error: edit ${title}: ${code || '?'} ${first.error.info ?? ''}`);
+        };
+
+        const retry = await this._edit_once({ ...base });
+
+        if (retry.error) {
+            const err = retry.error;
+            throw new Error(`WikiWire API error: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`);
+        };
+
+        return { fallback: true };
     };
 
     // returns true if deleted, false if page was already missing
-    async delete(title : string, reason : string) : Promise<boolean> {
+    async delete(title : string, reason : string, opts : { probe ?: boolean } = {}) : Promise<boolean> {
         if (!this.csrftoken) { throw new Error('WikiWire API error: not logged in (missing CSRF token)'); };
 
-        const exists = await this.page_exists(title);
-        if (!exists) { return false };
+        const probe = opts.probe !== false;
+
+        if (probe) {
+            const exists = await this.page_exists(title);
+            if (!exists) { return false };
+        };
 
         const data = await this._post({
             action: 'delete',
