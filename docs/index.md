@@ -44,6 +44,9 @@ As seen above, WikiWire expects `modules/`, `templates/`, and `mediawiki/` at th
 - **Templates:** `templates/<host|id>/<name>/...`
 - **MediaWiki namespace:** `mediawiki/<host|id>/<page>.<ext>` (flat files), or `mediawiki/<host|id>/<page>/...` when a page has subpages
 
+!!! tip
+  Nested files map to subpages: title suffixes (`.template.wikitext`, `.module.lua` / `.module.luau`, `.wikitext`) are stripped from the on-wiki title, and an index file whose basename matches its parent folder collapses (e.g. `templates/…/ArticleFlow/Group/Studio.wikitext` → `Template:ArticleFlow/Group/Studio`, `…/Group/Group.template.wikitext` → `Template:ArticleFlow/Group`). `.css` / `.js` / `.json` keep their extensions in the title.
+
 Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also be its `id` value if no `host` is set. Using the `host` value instead removes any ambiguity and is encouraged.
 
 !!! tip

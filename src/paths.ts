@@ -14,6 +14,13 @@ export type mapped_site = {
 
 export type mapped_path = mapped_shared | mapped_site;
 
+const TITLE_STRIP_SUFFIXES = [
+    '.template.wikitext',
+    '.module.luau',
+    '.module.lua',
+    '.wikitext',
+] as const;
+
 export function parse_shared_path_segment(path_segment : string) : { kind : 'shared' | 'common' | 'group'; group_name ?: string } | null {
     if (path_segment === 'shared') {
         return { kind: 'shared' };
@@ -51,6 +58,40 @@ function is_bare_lua_extension(rel_under_root : string) : boolean {
         (rel_under_root.endsWith('.lua') && !rel_under_root.endsWith('.module.lua')) ||
         (rel_under_root.endsWith('.luau') && !rel_under_root.endsWith('.module.luau'))
     );
+};
+
+
+export function strip_title_suffix(rel_under_root : string) : { path : string; stripped : boolean } {
+    for (const suffix of TITLE_STRIP_SUFFIXES) {
+        if (rel_under_root.endsWith(suffix)) {
+            return { path: rel_under_root.slice(0, -suffix.length), stripped: true };
+        };
+    };
+
+    return { path: rel_under_root, stripped: false };
+};
+
+export function title_path_under_root(rel_under_root : string, wiki_name : string) : string {
+    const { path: stripped, stripped: did_strip } = strip_title_suffix(rel_under_root);
+    const parts = stripped.split('/').filter(Boolean);
+
+    if (parts.length === 0) { return '' };
+
+    if (did_strip) {
+        const leaf = parts[parts.length - 1];
+        const parent = parts.length >= 2 ? parts[parts.length - 2] : wiki_name;
+        if (leaf === parent) {
+            parts.pop();
+        };
+    };
+
+    return parts.join('/');
+};
+
+function namespace_title(namespace : string, wiki_name : string, title_rel : string) : string {
+    if (title_rel.length === 0) { return `${namespace}:${wiki_name}` };
+
+    return `${namespace}:${wiki_name}/${title_rel}`;
 };
 
 function content_model_from_mediawiki_page_name(page_name : string, css_content_model : string) : string {
@@ -213,24 +254,6 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
             throw new Error( `WikiWire: ${relative_path}: .template.wikitext belongs under templates/, not modules/` );
         };
 
-        if (rel_under_root === `${wiki_name}.module.lua` || rel_under_root === `${wiki_name}.module.luau`) {
-            return {
-                is_shared,
-                title: `Module:${wiki_name}`,
-                content_model: 'scribunto',
-                kind: 'module',
-            };
-        };
-
-        if (rel_under_root === 'doc.wikitext') {
-            return {
-                is_shared,
-                title: `Module:${wiki_name}/doc`,
-                content_model: 'wikitext',
-                kind: 'module',
-            };
-        };
-
         const content_model = content_model_for_repo_subfile(rel_under_root, css_content_model, {
             allow_scribunto: true,
             ignore_content_model_errors,
@@ -240,31 +263,13 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
 
         return {
             is_shared,
-            title: `Module:${wiki_name}/${rel_under_root}`,
+            title: namespace_title('Module', wiki_name, title_path_under_root(rel_under_root, wiki_name)),
             content_model,
             kind: 'module',
         };
     };
 
     if (root === 'templates') {
-        if (rel_under_root === `${wiki_name}.template.wikitext`) {
-            return {
-                is_shared,
-                title: `Template:${wiki_name}`,
-                content_model: 'wikitext',
-                kind: 'template',
-            };
-        }
-
-        if (rel_under_root === 'doc.wikitext') {
-            return {
-                is_shared,
-                title: `Template:${wiki_name}/doc`,
-                content_model: 'wikitext',
-                kind: 'template',
-            };
-        }
-
         const content_model = content_model_for_repo_subfile(rel_under_root, css_content_model, {
             allow_scribunto: false,
             ignore_content_model_errors,
@@ -274,7 +279,7 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
 
         return {
             is_shared,
-            title: `Template:${wiki_name}/${rel_under_root}`,
+            title: namespace_title('Template', wiki_name, title_path_under_root(rel_under_root, wiki_name)),
             content_model,
             kind: 'template',
         };
@@ -287,21 +292,13 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
         throw new Error( `WikiWire: ${relative_path}: .template.wikitext belongs under templates/, not mediawiki/` );
     };
 
+    // .js / .css / .json / extensionless main pages keep their filenames in the title leaf
     const main_page = try_map_mediawiki_main_page(wiki_name, rel_under_root, css_content_model);
     if (main_page) {
         return {
             is_shared,
             title: main_page.title,
             content_model: main_page.content_model,
-            kind: 'mediawiki',
-        };
-    }
-
-    if (rel_under_root === 'doc.wikitext') {
-        return {
-            is_shared,
-            title: `MediaWiki:${wiki_name}/doc`,
-            content_model: 'wikitext',
             kind: 'mediawiki',
         };
     }
@@ -314,7 +311,7 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
 
     return {
         is_shared,
-        title: `MediaWiki:${wiki_name}/${rel_under_root}`,
+        title: namespace_title('MediaWiki', wiki_name, title_path_under_root(rel_under_root, wiki_name)),
         content_model,
         kind: 'mediawiki',
     };

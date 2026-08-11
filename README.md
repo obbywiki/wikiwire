@@ -43,6 +43,8 @@ As seen above, WikiWire expects `modules/`, `templates/`, and `mediawiki/` at th
 - **Templates:** `templates/<host|id>/<name>/...`
 - **MediaWiki namespace:** `mediawiki/<host|id>/<page>.<ext>` (flat files), or `mediawiki/<host|id>/<page>/...` when a page has subpages
 
+Nested files map to subpages: title suffixes (`.template.wikitext`, `.module.lua` / `.module.luau`, `.wikitext`) are stripped from the on-wiki title, and an index file whose basename matches its parent folder collapses (e.g. `templates/…/ArticleFlow/Group/Studio.wikitext` → `Template:ArticleFlow/Group/Studio`, `…/Group/Group.template.wikitext` → `Template:ArticleFlow/Group`). `.css` / `.js` / `.json` keep their extensions in the title.
+
 Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also be its `id` value if no `host` is set. Using the `host` value instead removes any ambiguity and is encouraged.
 
 > [!TIP] 
@@ -258,19 +260,35 @@ For additional details, see the specification here.
 |------|-------------------|------------|----------------|
 | `modules` | `modules/<path_segment>/<root>/<root>.module.lua` | `Module:<root>` | `scribunto` |
 | `modules` | `modules/<path_segment>/<root>/doc.wikitext` | `Module:<root>/doc` | `wikitext` |
-| `modules` | `modules/<path_segment>/<root>/<any other path>` | `Module:<root>/<any other path>` | See below |
+| `modules` | `modules/<path_segment>/<root>/<nested path>` | `Module:<root>/<title path>` | See below |
 | `templates` | `templates/<path_segment>/<root>/<root>.template.wikitext` | `Template:<root>` | `wikitext` |
 | `templates` | `templates/<path_segment>/<root>/doc.wikitext` | `Template:<root>/doc` | `wikitext` |
-| `templates` | `templates/<path_segment>/<root>/<any other path>` | `Template:<root>/<any other path>` | See below |
+| `templates` | `templates/<path_segment>/<root>/<nested path>` | `Template:<root>/<title path>` | See below |
 | `mediawiki` | `mediawiki/<path_segment>/<page>.<ext>` or `<page>` | `MediaWiki:<page>` | Inferred from file name (see below) |
 | `mediawiki` | `mediawiki/<path_segment>/<root>/doc.wikitext` | `MediaWiki:<root>/doc` | `wikitext` |
-| `mediawiki` | `mediawiki/<path_segment>/<root>/<any other path>` | `MediaWiki:<root>/<any other path>` | See below |
+| `mediawiki` | `mediawiki/<path_segment>/<root>/<nested path>` | `MediaWiki:<root>/<title path>` | See below |
 
-Any other file under `modules/<path_segment>/<root>/` maps 1:1: the wiki subpage path is exactly the relative path under `<root>/`, including nested directories (for example `i18n/en.json` becomes `Module:GroupLink/i18n/en.json`).
+### Title path rules (nested files)
 
-The same 1:1 rule applies under `templates/<path_segment>/<root>/` for every path except the main `<root>.template.wikitext` (which maps to the bare `Template:<root>`) and `doc.wikitext` (which maps to `Template:<root>/doc`). For example `styles.css` becomes `Template:MonthNav/styles.css`.
+On-wiki titles are built from the path under `<root>/` with these rules:
 
-Most `MediaWiki:` pages have no subpages and live as flat files directly under `mediawiki/<path_segment>/` (for example `mediawiki/example.org/Sitenotice.wikitext` → `MediaWiki:Sitenotice`, `mediawiki/example.org/Common.js` → `MediaWiki:Common.js`). When a page does have subpages, use a directory: `mediawiki/example.org/Sitenotice/ja` → `MediaWiki:Sitenotice/ja`. The nested `mediawiki/<path_segment>/<root>/<root>.<ext>` layout is also still accepted.
+1. **Strip title suffixes** from the leaf (longest match first): `.template.wikitext`, `.module.luau`, `.module.lua`, `.wikitext`. Leave `.css`, `.js`, `.json`, and extensionless basenames unchanged.
+2. **Index collapse**: if the leaf (after strip) equals its parent folder name or it equals `<root>` when the file sits directly under the root folder, drop the leaf. That maps `Group/Group.wikitext` to `.../Group` and `<root>/<root>.template.wikitext` to bare `Template:<root>`.
+
+Examples under `templates/<path_segment>/ArticleFlow/`:
+
+| Repository path (under root) | Wiki title |
+|------------------------------|------------|
+| `ArticleFlow.template.wikitext` | `Template:ArticleFlow` |
+| `Group/Studio.wikitext` | `Template:ArticleFlow/Group/Studio` |
+| `Group/Studio.template.wikitext` | `Template:ArticleFlow/Group/Studio` |
+| `Group/Group.wikitext` or `Group/Group.template.wikitext` | `Template:ArticleFlow/Group` |
+| `Group/Group/Group.template.wikitext` | `Template:ArticleFlow/Group/Group` |
+| `Group/styles.css` | `Template:ArticleFlow/Group/styles.css` |
+
+The same strip + collapse rules apply under `modules/` (e.g. `Bar/Bar.module.lua` to `Module:<root>/Bar`) and nested `mediawiki/` directories (e.g. `ja.wikitext` to `MediaWiki:<root>/ja`). Asset files stay 1:1 including extensions (`i18n/en.json` to `Module:GroupLink/i18n/en.json`, `styles.css` to `Template:MonthNav/styles.css`).
+
+Most `MediaWiki:` pages have no subpages and live as flat files directly under `mediawiki/<path_segment>/` (for example `mediawiki/example.org/Sitenotice.wikitext` to `MediaWiki:Sitenotice`, `mediawiki/example.org/Common.js` to `MediaWiki:Common.js`). When a page does have subpages, use a directory: `mediawiki/example.org/Sitenotice/ja` to `MediaWiki:Sitenotice/ja`. The nested `mediawiki/<path_segment>/<root>/<root>.<ext>` layout is also still accepted.
 
 Templates synced to `Template:` must live under `templates/`, not `modules/`. MediaWiki namespace pages must live under `mediawiki/`. You can still use regular wikitext files under a template root like any other subpath.
 
@@ -294,7 +312,7 @@ Bare `.lua` or `.luau` extensions (without `.module.`) always error.
 
 ### Content models (non-special files under `templates/`)
 
-Suffix matching uses the same order as under `modules/`, with one restriction: `*.module.lua` and `*.module.luau` are invalid under `templates/` (Scribunto modules must live under `modules/`). The main page must be `<root>.template.wikitext` at `templates/<path_segment>/<root>/<root>.template.wikitext`.
+Suffix matching uses the same order as under `modules/`, with one restriction: `*.module.lua` and `*.module.luau` are invalid under `templates/` (Scribunto modules must live under `modules/`). The main page is normally `<root>.template.wikitext` at `templates/<path_segment>/<root>/<root>.template.wikitext` (a bare `<root>.wikitext` at that location also maps to `Template:<root>`). Nested subpages may use either `.wikitext` or `.template.wikitext`; both strip to the same title.
 
 | Pattern | Content model |
 |---------|---------------|
