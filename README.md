@@ -238,7 +238,7 @@ Successful runs log lines like `WikiWire: [dry-run] would edit Module:MyModule o
 
 If you are having trouble setting up WikiWire, use our repository as a guide: https://github.com/obbywiki/modules.
 
-Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action API.
+Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action API. Transient HTTP 429/5xx responses and MediaWiki `ratelimited` / `maxlag` errors are waited out with capped backoff; WikiWire stops rather than forcing further writes if the wiki stays limited.
 
 # Reference
 
@@ -247,8 +247,11 @@ Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action A
 Most of the errors in WikiWire will be prefixed with a type.
 
 * "WikiWire config error" -> an issue with your configuration only (wikiwire.toml, .wikiwireignore)
+* "WikiWire HTTP error" -> the Action API returned a non-success HTTP status (for example 403 from Cloudflare, or a rate limit that did not recover)
 * "WikiWire API error" -> there was an issue contacting the MW API
 * "WikiWire content model error" -> an error with a content model (e.g., a module not under modules/)
+
+WikiWire waits and retries on HTTP 429/502/503/504, network timeouts, and MediaWiki `ratelimited` / `maxlag` / `readonly` errors. It honors `Retry-After` when present, backs off gradually otherwise, and stops if the wiki stays limited rather than forcing further writes. Session token failures are retried after a single re-login, then fail closed. Failure messages include how many jobs had already succeeded (`stopped after 7/12`).
 
 # WikiWire Specification
 

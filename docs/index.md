@@ -45,7 +45,7 @@ As seen above, WikiWire expects `modules/`, `templates/`, and `mediawiki/` at th
 - **MediaWiki namespace:** `mediawiki/<host|id>/<page>.<ext>` (flat files), or `mediawiki/<host|id>/<page>/...` when a page has subpages
 
 !!! tip
-  Nested files map to subpages: title suffixes (`.template.wikitext`, `.module.lua` / `.module.luau`, `.wikitext`) are stripped from the on-wiki title, and an index file whose basename matches its parent folder collapses (e.g. `templates/…/ArticleFlow/Group/Studio.wikitext` → `Template:ArticleFlow/Group/Studio`, `…/Group/Group.template.wikitext` → `Template:ArticleFlow/Group`). `.css` / `.js` / `.json` keep their extensions in the title.
+  Nested files map to subpages: title suffixes (`.template.wikitext`, `.module.lua` / `.module.luau`, `.wikitext`) are stripped from the on-wiki title, and an index file whose basename matches its parent folder collapses (e.g. `templates/.../Segment1/Segment2/Segment3.wikitext` resolves as `Template:Segment1/Segment2/Segment3`, `.../Segment1/Segment1.template.wikitext` goes to `Template:ArticleFlow/Segment1`). `.css` / `.js` / `.json` keep their extensions in the title.
 
 Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also be its `id` value if no `host` is set. Using the `host` value instead removes any ambiguity and is encouraged.
 
@@ -199,4 +199,4 @@ After completing every step above, you should be ready to test WikiWire. Make an
 
 If you are having trouble setting up WikiWire, use our repository as a guide: https://github.com/obbywiki/modules.
 
-Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action API.
+Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action API. Transient HTTP 429/5xx responses and MediaWiki `ratelimited` / `maxlag` errors are waited out with capped backoff; WikiWire stops rather than forcing further writes if the wiki stays limited.

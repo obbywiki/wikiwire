@@ -388,7 +388,10 @@ async function run() : Promise<void> {
         if (!cfg) { throw new Error(`WikiWire internal error: missing site ${site_id}`) };
 
         const { username, password } = credentials_for_site(site_id);
-        const session = new mw_session(cfg.api, username, password);
+        const session = new mw_session(cfg.api, username, password, {
+            log: (message) => core.info(message),
+            site_id,
+        });
 
         await session.login();
         sessions.set(site_id, session);
@@ -396,37 +399,67 @@ async function run() : Promise<void> {
         return session;
     };
 
-    for (const job of jobs) {
-        const dry = input_dry || job.site_cfg.dry_run;
-        const existence = existence_hint_for(job.git_status, infer_page_existence);
+    let completed = 0;
 
-        if (job.kind === 'delete') {
-            if (dry) { core.info( `WikiWire: [dry-run] would delete ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` ); continue };
+    try {
+        for (let job_index = 0; job_index < jobs.length; job_index++) {
+            const job = jobs[job_index];
+            const dry = input_dry || job.site_cfg.dry_run;
+            const existence = existence_hint_for(job.git_status, infer_page_existence);
 
-            const session = await get_session(job.site_cfg.id);
-            const deleted = await session.delete(job.mapped.title, `WikiWire: delete ${job.file}`, {
-                probe: !(infer_page_existence && job.git_status === 'removed'),
-            });
+            if (job.kind === 'delete') {
+                if (dry) {
+                    core.info( `WikiWire: [dry-run] would delete ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` );
+                    completed += 1;
+                    continue;
+                };
 
-            if (deleted) {
-                core.info(`WikiWire: deleted ${job.mapped.title} on ${job.site_cfg.id}`);
-            } else {
-                core.info(`WikiWire: skipped delete of ${job.mapped.title} on ${job.site_cfg.id} (page already missing)`);
+                core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} delete ${job.mapped.title} on ${job.site_cfg.id}`);
+
+                const session = await get_session(job.site_cfg.id);
+                const deleted = await session.delete(job.mapped.title, `WikiWire: delete ${job.file}`, {
+                    probe: !(infer_page_existence && job.git_status === 'removed'),
+                });
+
+                if (deleted) {
+                    core.info(`WikiWire: deleted ${job.mapped.title} on ${job.site_cfg.id}`);
+                } else {
+                    core.info(`WikiWire: skipped delete of ${job.mapped.title} on ${job.site_cfg.id} (page already missing)`);
+                };
+
+                completed += 1;
+                continue;
             };
 
-            continue;
+            if (dry) {
+                core.info( `WikiWire: [dry-run] would edit ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` );
+                completed += 1;
+                continue;
+            };
+
+            core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} edit ${job.mapped.title} on ${job.site_cfg.id}`);
+
+            const session = await get_session(job.site_cfg.id);
+            const text = fs.readFileSync(path.join(workspace, job.file), 'utf8');
+
+            const result = await session.edit( job.mapped.title, text, `WikiWire: sync ${job.file}`, job.mapped.content_model, existence );
+
+            if (result.fallback) { core.info( `WikiWire: existence inference missed for ${job.mapped.title} on ${job.site_cfg.id} (git_status=${job.git_status}); retried successfully` ); };
+
+            core.info(`WikiWire: updated ${job.mapped.title} on ${job.site_cfg.id}`);
+            completed += 1;
+        };
+    } catch (err : unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+
+        if (/\(stopped after \d+\/\d+\)$/.test(msg)) { throw err };
+
+        if (err instanceof Error) {
+            err.message = `${msg} (stopped after ${completed}/${jobs.length})`;
+            throw err;
         };
 
-        if (dry) { core.info( `WikiWire: [dry-run] would edit ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` ); continue };
-
-        const session = await get_session(job.site_cfg.id);
-        const text = fs.readFileSync(path.join(workspace, job.file), 'utf8');
-
-        const result = await session.edit( job.mapped.title, text, `WikiWire: sync ${job.file}`, job.mapped.content_model, existence );
-
-        if (result.fallback) { core.info( `WikiWire: existence inference missed for ${job.mapped.title} on ${job.site_cfg.id} (git_status=${job.git_status}); retried successfully` ); };
-
-        core.info(`WikiWire: updated ${job.mapped.title} on ${job.site_cfg.id}`);
+        throw new Error(`${msg} (stopped after ${completed}/${jobs.length})`);
     };
 };
 
