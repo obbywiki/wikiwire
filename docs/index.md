@@ -199,4 +199,4 @@ After completing every step above, you should be ready to test WikiWire. Make an
 
 If you are having trouble setting up WikiWire, use our repository as a guide: https://github.com/obbywiki/modules.
 
-Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action API. Transient HTTP 429/5xx responses and MediaWiki `ratelimited` / `maxlag` errors are waited out with capped backoff; WikiWire stops rather than forcing further writes if the wiki stays limited.
+Some aspects such as Cloudflare's Bot Fight Mode can interfere with the Action API. Transient HTTP 429/5xx responses and MediaWiki `ratelimited` / `maxlag` errors are waited out with capped backoff; WikiWire stops rather than forcing further writes if the wiki stays limited. A known permanent per-page API error is recorded and remaining jobs continue; the Action still fails after the queue finishes.

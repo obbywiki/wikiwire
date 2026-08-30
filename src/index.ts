@@ -6,7 +6,7 @@ import ignore from 'ignore';
 
 import { load_config, type site_config } from './config';
 import { map_repo_path, parse_shared_path_segment, type mapped_path } from './paths';
-import { mw_session, type existence_hint } from './mediawiki';
+import { mw_page_error, mw_session, type existence_hint } from './mediawiki';
 import { parse_site_credentials } from './site_credentials';
 
 import type { Ignore } from 'ignore';
@@ -418,6 +418,7 @@ async function run() : Promise<void> {
     };
 
     let completed = 0;
+    const page_failures : { error : mw_page_error; site_id : string }[] = [];
 
     try {
         for (let job_index = 0; job_index < jobs.length; job_index++) {
@@ -425,47 +426,57 @@ async function run() : Promise<void> {
             const dry = input_dry || job.site_cfg.dry_run;
             const existence = existence_hint_for(job.git_status, infer_page_existence);
 
-            if (job.kind === 'delete') {
-                if (dry) {
-                    core.info( `WikiWire: [dry-run] would delete ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}${attribution}` );
+            try {
+                if (job.kind === 'delete') {
+                    if (dry) {
+                        core.info( `WikiWire: [dry-run] would delete ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}${attribution}` );
+                        completed += 1;
+                        continue;
+                    };
+
+                    core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} delete ${job.mapped.title} on ${job.site_cfg.id}`);
+
+                    const session = await get_session(job.site_cfg.id);
+                    const deleted = await session.delete(job.mapped.title, change_summary('delete', job.file, attribution), {
+                        probe: !(infer_page_existence && job.git_status === 'removed'),
+                    });
+
+                    if (deleted) {
+                        core.info(`WikiWire: deleted ${job.mapped.title} on ${job.site_cfg.id}`);
+                    } else {
+                        core.info(`WikiWire: skipped delete of ${job.mapped.title} on ${job.site_cfg.id} (page already missing)`);
+                    };
+
                     completed += 1;
                     continue;
                 };
 
-                core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} delete ${job.mapped.title} on ${job.site_cfg.id}`);
-
-                const session = await get_session(job.site_cfg.id);
-                const deleted = await session.delete(job.mapped.title, change_summary('delete', job.file, attribution), {
-                    probe: !(infer_page_existence && job.git_status === 'removed'),
-                });
-
-                if (deleted) {
-                    core.info(`WikiWire: deleted ${job.mapped.title} on ${job.site_cfg.id}`);
-                } else {
-                    core.info(`WikiWire: skipped delete of ${job.mapped.title} on ${job.site_cfg.id} (page already missing)`);
+                if (dry) {
+                    core.info( `WikiWire: [dry-run] would edit ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}${attribution}` );
+                    completed += 1;
+                    continue;
                 };
 
+                core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} edit ${job.mapped.title} on ${job.site_cfg.id}`);
+
+                const session = await get_session(job.site_cfg.id);
+                const text = fs.readFileSync(path.join(workspace, job.file), 'utf8');
+
+                const result = await session.edit( job.mapped.title, text, change_summary('edit', job.file, attribution), job.mapped.content_model, existence );
+
+                if (result.fallback) { core.info( `WikiWire: existence inference missed for ${job.mapped.title} on ${job.site_cfg.id} (git_status=${job.git_status}); retried successfully` ); };
+
+                core.info(`WikiWire: updated ${job.mapped.title} on ${job.site_cfg.id}`);
                 completed += 1;
-                continue;
+            } catch (err : unknown) {
+                if (err instanceof mw_page_error) {
+                    core.error(`${err.message} on ${job.site_cfg.id}; continuing remaining jobs`);
+                    page_failures.push({ error: err, site_id: job.site_cfg.id });
+                    continue;
+                };
+
+                throw err;
             };
-
-            if (dry) {
-                core.info( `WikiWire: [dry-run] would edit ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}${attribution}` );
-                completed += 1;
-                continue;
-            };
-
-            core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} edit ${job.mapped.title} on ${job.site_cfg.id}`);
-
-            const session = await get_session(job.site_cfg.id);
-            const text = fs.readFileSync(path.join(workspace, job.file), 'utf8');
-
-            const result = await session.edit( job.mapped.title, text, change_summary('edit', job.file, attribution), job.mapped.content_model, existence );
-
-            if (result.fallback) { core.info( `WikiWire: existence inference missed for ${job.mapped.title} on ${job.site_cfg.id} (git_status=${job.git_status}); retried successfully` ); };
-
-            core.info(`WikiWire: updated ${job.mapped.title} on ${job.site_cfg.id}`);
-            completed += 1;
         };
     } catch (err : unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -478,6 +489,15 @@ async function run() : Promise<void> {
         };
 
         throw new Error(`${msg} (stopped after ${completed}/${jobs.length})`);
+    };
+
+    if (page_failures.length > 0) {
+        const noun = page_failures.length === 1 ? 'page' : 'pages';
+        const details = page_failures
+            .map((failure) => `${failure.error.action} ${failure.error.title} on ${failure.site_id}: ${failure.error.code}`)
+            .join('; ');
+
+        throw new Error(`WikiWire: ${page_failures.length} ${noun} failed after completing ${completed}/${jobs.length}: ${details}`);
     };
 };
 

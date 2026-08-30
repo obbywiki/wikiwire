@@ -41,6 +41,20 @@ export type mw_session_opts = {
     site_id ?: string;
 };
 
+export class mw_page_error extends Error {
+    code : string;
+    title : string;
+    action : 'edit' | 'delete';
+
+    constructor(message : string, opts : { code : string; title : string; action : 'edit' | 'delete' }) {
+        super(message);
+        this.name = 'mw_page_error';
+        this.code = opts.code;
+        this.title = opts.title;
+        this.action = opts.action;
+    };
+};
+
 type wait_decision =
     | { kind : 'wait'; ms : number; truncated : boolean }
     | { kind : 'stop'; reason : string };
@@ -121,6 +135,49 @@ function is_retryable_api_code(code : string) : boolean {
 
 function is_session_drop_code(code : string) : boolean {
     return code === 'badtoken' || code === 'notoken' || code === 'assertuserfailed';
+};
+
+const PERMANENT_PAGE_ERROR_CODES = new Set([
+    'protectedpage',
+    'cascadeprotected',
+    'protectednamespace',
+    'protectednamespace-interface',
+    'protectedtitle',
+    'customcssprotected',
+    'customjsprotected',
+    'customjsonprotected',
+    'customcssjsprotected',
+    'abusefilter-disallowed',
+    'abusefilter',
+    'spamblacklist',
+    'spamdetected',
+    'titleblacklist-forbidden',
+    'invalidtitle',
+    'badtitle',
+    'contenttoobig',
+    'hookaborted',
+    'filtered',
+    'badcontentmodel',
+    'invalid-contentmodel',
+    'changecontentmodel-cannot-convert',
+    'nochangecontentmodel',
+    'noimageredirect',
+    'cantdelete',
+    'delete-hookaborted',
+]);
+
+function is_permanent_page_error(code : string) : boolean {
+    return PERMANENT_PAGE_ERROR_CODES.has(code);
+};
+
+function throw_action_error(action : 'edit' | 'delete', title : string, code : string, info : string) : never {
+    const msg = `WikiWire API error: ${action} ${title}: ${code || '?'} ${info}`;
+
+    if (is_permanent_page_error(code)) {
+        throw new mw_page_error(msg, { code, title, action });
+    };
+
+    throw new Error(msg);
 };
 
 function is_retryable_network_error(err : unknown) : boolean {
@@ -600,7 +657,7 @@ export class mw_session {
 
             if (data.error) {
                 const err = data.error;
-                throw new Error(`WikiWire API error: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`);
+                throw_action_error('edit', title, err.code ?? '', err.info ?? '');
             };
 
             return { fallback: false };
@@ -614,14 +671,14 @@ export class mw_session {
             const code = first.error.code ?? '';
 
             if (!is_missing_page_edit_error(code)) {
-                throw new Error(`WikiWire API error: edit ${title}: ${code || '?'} ${first.error.info ?? ''}`);
+                throw_action_error('edit', title, code, first.error.info ?? '');
             };
 
             const retry = await this._edit_once(this._edit_params(title, text, summary, { contentmodel: content_model }));
 
             if (retry.error) {
                 const err = retry.error;
-                throw new Error(`WikiWire API error: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`);
+                throw_action_error('edit', title, err.code ?? '', err.info ?? '');
             };
 
             return { fallback: true };
@@ -635,14 +692,14 @@ export class mw_session {
         const code = first.error.code ?? '';
 
         if (!is_createonly_conflict_error(code)) {
-            throw new Error(`WikiWire API error: edit ${title}: ${code || '?'} ${first.error.info ?? ''}`);
+            throw_action_error('edit', title, code, first.error.info ?? '');
         };
 
         const retry = await this._edit_once(this._edit_params(title, text, summary));
 
         if (retry.error) {
             const err = retry.error;
-            throw new Error(`WikiWire API error: edit ${title}: ${err.code ?? '?'} ${err.info ?? ''}`);
+            throw_action_error('edit', title, err.code ?? '', err.info ?? '');
         };
 
         return { fallback: true };
@@ -675,7 +732,7 @@ export class mw_session {
 
             if (code === 'missingtitle' || code === 'pagedeleted') { return false };
 
-            throw new Error(`WikiWire API error: delete ${title}: ${code || '?'} ${err.info ?? ''}`);
+            throw_action_error('delete', title, code, err.info ?? '');
         };
 
         if (!data.delete) { throw new Error(`WikiWire API error: delete ${title}: unexpected response ${JSON.stringify(data)}`); };

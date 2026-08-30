@@ -251,7 +251,7 @@ Most of the errors in WikiWire will be prefixed with a type.
 * "WikiWire API error" -> there was an issue contacting the MW API
 * "WikiWire content model error" -> an error with a content model (e.g., a module not under modules/)
 
-WikiWire waits and retries on HTTP 429/502/503/504, network timeouts, and MediaWiki `ratelimited` / `maxlag` / `readonly` errors. It honors `Retry-After` when present, backs off gradually otherwise, and stops if the wiki stays limited rather than forcing further writes. Session token failures are retried after a single re-login, then fail closed. Failure messages include how many jobs had already succeeded (`stopped after 7/12`).
+WikiWire waits and retries on HTTP 429/502/503/504, network timeouts, and MediaWiki `ratelimited` / `maxlag` / `readonly` errors. It honors `Retry-After` when present, backs off gradually otherwise, and stops if the wiki stays limited rather than forcing further writes. Session token failures are retried after a single re-login, then fail closed. A known permanent per-page API error (for example a protected page or abuse filter) is recorded and remaining jobs continue; the Action still fails after the queue finishes. HTTP, session, rate-limit, and other account-wide errors still stop the run. Failure messages include how many jobs had already succeeded (`stopped after 7/12`, or `N pages failed after completing 11/12`).
 
 # WikiWire Specification
 
