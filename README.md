@@ -365,6 +365,7 @@ Place at the repository root unless you override with the `config_path` action i
 | `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Default false. |
 | `delete_removed` | boolean | no | If true, delete on-wiki pages when the corresponding repo files are removed in a push. Also enabled by the action input of the same name. Removing a whole site or shared directory (e.g. `modules/<host>/`) is treated as a reorganization and does **not** mass-delete every module/template underneath it. Default false. |
 | `infer_page_existence` | boolean | no | If true, push-diff syncs (any sync job that doesn't use `sync_all`) skip the MediaWiki `page_exists` probe when GitHub reports a clear create vs modify status, roughly halving Action API round-trips per page which results in 2x speeds. Default false. |
+| `push_attribution` | boolean | no | If true, MediaWiki edit and delete summaries on `push` events include the GitHub user who pushed and a 7-character commit SHA when available (also shown on dry-run logs). Omitted for non-`push` events. Default false. |
 
 ### `[[sites]]` (repeatable)
 

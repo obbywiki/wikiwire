@@ -66,6 +66,16 @@ If true, push-diff syncs (any sync job that doesn't use `sync_all`) skip the Med
 infer_page_existence = true
 ```
 
+## push_attribution (boolean)
+
+If true, MediaWiki edit and delete summaries on `push` events include the GitHub user who pushed and the first 7 characters of the commit SHA when those are available, for example `WikiWire: sync modules/example.com/Foo/Foo.module.lua (wlft, c177963)`. Default false.
+
+The same suffix is appended to dry-run log lines. Attribution is omitted for non-`push` events (including `sync_all: override` on `workflow_dispatch`). If only the user or only the SHA is present, that piece is included alone.
+
+```
+push_attribution = true
+```
+
 ## [[sites]] (repeatable) (required)
 
 A `[[sites]]` defines a site. At minimum one of these entries must be provided.

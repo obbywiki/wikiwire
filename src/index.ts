@@ -13,7 +13,7 @@ import type { Ignore } from 'ignore';
 
 const REPO_ROOTS = ['modules', 'templates', 'mediawiki'] as const;
 
-type push_payload = { after ?: string; before ?: string };
+type push_payload = { after ?: string; before ?: string; pusher ?: { name ?: string } };
 
 type git_status = 'added' | 'modified' | 'changed' | 'renamed' | 'removed' | 'copied' | 'unknown';
 
@@ -73,6 +73,23 @@ function resolve_shared_targets(path_segment : string, sites : Map<string, site_
 
 function is_zero_sha(sha : string | undefined) : boolean { 
     return !sha || /^0+$/.test(sha);
+};
+
+function push_attribution_suffix() : string {
+    if (github.context.eventName !== 'push') { return '' };
+
+    const payload = github.context.payload as push_payload;
+    const user = payload.pusher?.name?.trim() || github.context.actor.trim();
+    const sha = payload.after ?? github.context.sha;
+    const short_sha = !is_zero_sha(sha) && sha.length >= 7 ? sha.slice(0, 7) : '';
+
+    const parts = [user, short_sha].filter(Boolean);
+    return parts.length ? ` (${parts.join(', ')})` : '';
+};
+
+function change_summary(kind : 'edit' | 'delete', file : string, attribution : string) : string {
+    const verb = kind === 'delete' ? 'delete' : 'sync';
+    return `WikiWire: ${verb} ${file}${attribution}`;
 };
 
 function walk_files(dir : string, workspace : string, out : string[]) : void {
@@ -276,7 +293,8 @@ async function run() : Promise<void> {
 
     if (!fs.existsSync(full_config)) { throw new Error(`WikiWire config error: config not found: ${full_config}`); };
 
-    const { sites, shared : shared_enabled, common : common_enabled, ignore_content_model_errors, delete_removed : config_delete_removed, infer_page_existence, path_to_site } = load_config(full_config);
+    const { sites, shared : shared_enabled, common : common_enabled, ignore_content_model_errors, delete_removed : config_delete_removed, infer_page_existence, push_attribution, path_to_site } = load_config(full_config);
+    const attribution = push_attribution ? push_attribution_suffix() : '';
     const delete_removed = input_delete_removed || config_delete_removed;
 
     for (const cred_site_id of site_creds_map.keys()) {
@@ -409,7 +427,7 @@ async function run() : Promise<void> {
 
             if (job.kind === 'delete') {
                 if (dry) {
-                    core.info( `WikiWire: [dry-run] would delete ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` );
+                    core.info( `WikiWire: [dry-run] would delete ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}${attribution}` );
                     completed += 1;
                     continue;
                 };
@@ -417,7 +435,7 @@ async function run() : Promise<void> {
                 core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} delete ${job.mapped.title} on ${job.site_cfg.id}`);
 
                 const session = await get_session(job.site_cfg.id);
-                const deleted = await session.delete(job.mapped.title, `WikiWire: delete ${job.file}`, {
+                const deleted = await session.delete(job.mapped.title, change_summary('delete', job.file, attribution), {
                     probe: !(infer_page_existence && job.git_status === 'removed'),
                 });
 
@@ -432,7 +450,7 @@ async function run() : Promise<void> {
             };
 
             if (dry) {
-                core.info( `WikiWire: [dry-run] would edit ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}` );
+                core.info( `WikiWire: [dry-run] would edit ${job.mapped.title} on ${job.site_cfg.id} <= ${job.file}${attribution}` );
                 completed += 1;
                 continue;
             };
@@ -442,7 +460,7 @@ async function run() : Promise<void> {
             const session = await get_session(job.site_cfg.id);
             const text = fs.readFileSync(path.join(workspace, job.file), 'utf8');
 
-            const result = await session.edit( job.mapped.title, text, `WikiWire: sync ${job.file}`, job.mapped.content_model, existence );
+            const result = await session.edit( job.mapped.title, text, change_summary('edit', job.file, attribution), job.mapped.content_model, existence );
 
             if (result.fallback) { core.info( `WikiWire: existence inference missed for ${job.mapped.title} on ${job.site_cfg.id} (git_status=${job.git_status}); retried successfully` ); };
 
