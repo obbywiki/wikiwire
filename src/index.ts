@@ -92,6 +92,18 @@ function change_summary(kind : 'edit' | 'delete', file : string, attribution : s
     return `WikiWire: ${verb} ${file}${attribution}`;
 };
 
+let sync_grouping = false;
+
+function sync_begin(header : string) : void {
+    if (sync_grouping) { core.info('') };
+    core.info(`WikiWire: ${header}`);
+    sync_grouping = true;
+};
+
+function sync_log(message : string) : void {
+    core.info(sync_grouping ? `└─ ${message}` : `WikiWire: ${message}`);
+};
+
 function walk_files(dir : string, workspace : string, out : string[]) : void {
     if (!fs.existsSync(dir)) return;
 
@@ -407,7 +419,7 @@ async function run() : Promise<void> {
 
         const { username, password } = credentials_for_site(site_id);
         const session = new mw_session(cfg.api, username, password, {
-            log: (message) => core.info(message),
+            log: (message) => sync_log(message),
             site_id,
         });
 
@@ -434,7 +446,7 @@ async function run() : Promise<void> {
                         continue;
                     };
 
-                    core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} delete ${job.mapped.title} on ${job.site_cfg.id}`);
+                    sync_begin(`syncing ${job_index + 1}/${jobs.length} delete ${job.mapped.title} on ${job.site_cfg.id}`);
 
                     const session = await get_session(job.site_cfg.id);
                     const deleted = await session.delete(job.mapped.title, change_summary('delete', job.file, attribution), {
@@ -442,9 +454,9 @@ async function run() : Promise<void> {
                     });
 
                     if (deleted) {
-                        core.info(`WikiWire: deleted ${job.mapped.title} on ${job.site_cfg.id}`);
+                        sync_log(`deleted ${job.mapped.title} on ${job.site_cfg.id}`);
                     } else {
-                        core.info(`WikiWire: skipped delete of ${job.mapped.title} on ${job.site_cfg.id} (page already missing)`);
+                        sync_log(`skipped delete of ${job.mapped.title} on ${job.site_cfg.id} (page already missing)`);
                     };
 
                     completed += 1;
@@ -457,20 +469,20 @@ async function run() : Promise<void> {
                     continue;
                 };
 
-                core.info(`WikiWire: syncing ${job_index + 1}/${jobs.length} edit ${job.mapped.title} on ${job.site_cfg.id}`);
+                sync_begin(`syncing ${job_index + 1}/${jobs.length} edit ${job.mapped.title} on ${job.site_cfg.id}`);
 
                 const session = await get_session(job.site_cfg.id);
                 const text = fs.readFileSync(path.join(workspace, job.file), 'utf8');
 
                 const result = await session.edit( job.mapped.title, text, change_summary('edit', job.file, attribution), job.mapped.content_model, existence );
 
-                if (result.fallback) { core.info( `WikiWire: existence inference missed for ${job.mapped.title} on ${job.site_cfg.id} (git_status=${job.git_status}); retried successfully` ); };
+                if (result.fallback) { sync_log( `existence inference missed for ${job.mapped.title} on ${job.site_cfg.id} (git_status=${job.git_status}); retried successfully` ); };
 
-                core.info(`WikiWire: updated ${job.mapped.title} on ${job.site_cfg.id}`);
+                sync_log(`updated ${job.mapped.title} on ${job.site_cfg.id}`);
                 completed += 1;
             } catch (err : unknown) {
                 if (err instanceof mw_page_error) {
-                    core.error(`${err.message} on ${job.site_cfg.id}; continuing remaining jobs`);
+                    core.error(`└─ ${err.message} on ${job.site_cfg.id}; continuing remaining jobs`);
                     page_failures.push({ error: err, site_id: job.site_cfg.id });
                     continue;
                 };

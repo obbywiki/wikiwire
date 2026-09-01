@@ -295,7 +295,7 @@ export class mw_session {
         if (this._min_gap_ms > 0) return;
 
         this._min_gap_ms = POST_RATE_LIMIT_GAP_MS;
-        this._log('WikiWire: will space later requests by 1s on this session after a rate limit');
+        this._log('will space later requests by 1s on this session after a rate limit');
     };
 
     async _respect_min_gap() : Promise<void> {
@@ -349,15 +349,15 @@ export class mw_session {
 
         if (opts.decision.truncated && opts.retry_after_ms != null) {
             this._log(
-                `WikiWire: wiki asked to wait ${wait_ms_for_log(opts.retry_after_ms)}; waiting 60s cap (retry ${next_attempt}/${MAX_ATTEMPTS})`,
+                `wiki asked to wait ${wait_ms_for_log(opts.retry_after_ms)}; waiting 60s cap (retry ${next_attempt}/${MAX_ATTEMPTS})`,
             );
         } else if (opts.retry_after_ms != null) {
             this._log(
-                `WikiWire: ${opts.cause} on action=${opts.action}${title_note}; wiki Retry-After=${wait_ms_for_log(opts.retry_after_ms)}; waiting ${wait_ms_for_log(opts.decision.ms)} (retry ${next_attempt}/${MAX_ATTEMPTS})`,
+                `${opts.cause} on action=${opts.action}${title_note}; wiki Retry-After=${wait_ms_for_log(opts.retry_after_ms)}; waiting ${wait_ms_for_log(opts.decision.ms)} (retry ${next_attempt}/${MAX_ATTEMPTS})`,
             );
         } else {
             this._log(
-                `WikiWire: ${opts.cause} on action=${opts.action}${title_note}; waiting ${wait_ms_for_log(opts.decision.ms)} (retry ${next_attempt}/${MAX_ATTEMPTS})`,
+                `${opts.cause} on action=${opts.action}${title_note}; waiting ${wait_ms_for_log(opts.decision.ms)} (retry ${next_attempt}/${MAX_ATTEMPTS})`,
             );
         };
 
@@ -536,7 +536,7 @@ export class mw_session {
             throw new Error(`WikiWire API error: session dropped (${code}) after re-login; stopping`);
         };
 
-        this._log(`WikiWire: session dropped (${code})${this._site_label()}; re-authenticating once`);
+        this._log(`session dropped (${code})${this._site_label()}; re-authenticating once`);
         await this.login();
 
         const retry_params = { ...params };
