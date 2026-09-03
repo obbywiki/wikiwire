@@ -1,6 +1,6 @@
 {
   "name": "wikiwire",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A GitHub Action which syncs Git modules, templates, and MediaWiki configuration pages to MediaWiki",
   "private": true,
   "main": "dist/index.js",

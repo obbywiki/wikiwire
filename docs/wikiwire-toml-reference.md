@@ -68,7 +68,7 @@ infer_page_existence = true
 
 ## push_attribution (boolean)
 
-If true, MediaWiki edit and delete summaries on `push` events include the GitHub user who pushed and the first 7 characters of the commit SHA when those are available, for example `WikiWire: sync modules/example.com/Foo/Foo.module.lua (wlft, c177963)`. Default false.
+If true, MediaWiki edit and delete summaries on `push` events include the GitHub user who pushed and the first 7 characters of the commit SHA when those are available, for example `WikiWire: sync modules/example.com/Foo/Foo.module.lua (wlft, c177963)`. Defaults to false.
 
 The same suffix is appended to dry-run log lines. Attribution is omitted for non-`push` events (including `sync_all: override` on `workflow_dispatch`). If only the user or only the SHA is present, that piece is included alone.
 
