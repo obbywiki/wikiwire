@@ -11,7 +11,7 @@ import { parse_site_credentials } from './site_credentials';
 
 import type { Ignore } from 'ignore';
 
-const REPO_ROOTS = ['modules', 'templates', 'mediawiki'] as const;
+const REPO_ROOTS = ['modules', 'templates', 'mediawiki', 'bucket'] as const;
 
 type push_payload = { after ?: string; before ?: string; pusher ?: { name ?: string } };
 

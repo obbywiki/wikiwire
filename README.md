@@ -3,7 +3,7 @@
 > [!IMPORTANT]  
 > WikiWire is currently experimental. Please use cautiously and avoid potentially destructive configurations such as `sync_all` and consider testing your configurations with `dry_run`s first.
 
-WikiWire is a GitHub Action that syncs files under `modules/`, `templates/`, and `mediawiki/` inside your Git repository into a live MediaWiki site via the [MediaWiki Action API](https://www.mediawiki.org/wiki/API:Action_API). WikiWire allows for smooth automated workflows that make your GitHub repository the primary authority over your content and seem less like a backup.
+WikiWire is a GitHub Action that syncs files under `modules/`, `templates/`, `mediawiki/`, and `bucket/` inside your Git repository into a live MediaWiki site via the [MediaWiki Action API](https://www.mediawiki.org/wiki/API:Action_API). WikiWire allows for smooth automated workflows that make your GitHub repository the primary authority over your content and seem less like a backup.
 
 WikiWire was developed by the Obby Wiki to streamline sharing modules across not only GitHub and MediaWiki, but also across multiple wikis. While complex, it is possible to transpile Luau to Lua 5.1 and upload it via this tool, as seen in [`obbywiki/modules`](https://github.com/obbywiki/modules).
 
@@ -25,7 +25,7 @@ WikiWire is a CI action you can add to your repository's CI as a new workflow, o
 
 ## Required repository layout
 
-To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced unless at least one of `modules/`, `templates/`, or `mediawiki/` exists in your repository.
+To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced unless at least one of `modules/`, `templates/`, `mediawiki/`, or `bucket/` exists in your repository.
 
 ```sh
 .
@@ -37,11 +37,12 @@ To get started, ensure your repository matches the correct layout that WikiWire 
 └─ .wikiwireignore
 ```
 
-As seen above, WikiWire expects `modules/`, `templates/`, and `mediawiki/` at the repository root. Paths outside these folders are ignored.
+As seen above, WikiWire expects `modules/`, `templates/`, `mediawiki/`, and `bucket/` at the repository root. Paths outside these folders are ignored.
 
 - **Modules:** `modules/<host|id>/<name>/...`
 - **Templates:** `templates/<host|id>/<name>/...`
 - **MediaWiki namespace:** `mediawiki/<host|id>/<page>.<ext>` (flat files), or `mediawiki/<host|id>/<page>/...` when a page has subpages
+- **Bucket namespace:** `bucket/<host|id>/<page>.json` (flat files only, as `.json` is stripped from the on-wiki title just for this namespace)
 
 Nested files map to subpages: title suffixes (`.template.wikitext`, `.module.lua` / `.module.luau`, `.wikitext`) are stripped from the on-wiki title, and an index file whose basename matches its parent folder collapses (e.g. `templates/…/ArticleFlow/Group/Studio.wikitext` → `Template:ArticleFlow/Group/Studio`, `…/Group/Group.template.wikitext` → `Template:ArticleFlow/Group`). `.css` / `.js` / `.json` keep their extensions in the title.
 
@@ -50,16 +51,16 @@ Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also b
 > [!TIP] 
 > The `shared` key is a special key that can only be used as the shared directory when enabled in `wikiwire.toml`. 
 > 
-> Content under `modules/shared/`, `templates/shared/`, and `mediawiki/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). 
+> Content under `modules/shared/`, `templates/shared/`, `mediawiki/shared/`, and `bucket/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). 
 > 
 > If the `shared` option is disabled or false in `wikiwire.toml`, the action will error when reading from `shared/`.
 > 
 > If you want to name a subfolder "shared" but don't want to trigger WikiWire, name the folder `_shared` instead. 
-> Any path under `modules/`, `templates/`, or `mediawiki/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
+> Any path under `modules/`, `templates/`, `mediawiki/`, or `bucket/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
 >
-> Shared site groups use path segments like `shared-lang` or `shared-public`. Content under `modules/shared-lang/`, `templates/shared-lang/`, and `mediawiki/shared-lang/` is synced only to sites whose `shared_groups` includes `lang`. On-wiki titles are the same as for a single site.
+> Shared site groups use path segments like `shared-lang` or `shared-public`. Content under `modules/shared-lang/`, `templates/shared-lang/`, `mediawiki/shared-lang/`, and `bucket/shared-lang/` is synced only to sites whose `shared_groups` includes `lang`. On-wiki titles are the same as for a single site.
 >
-> The `common` key works like a legacy shared site group. When `common = true` in `wikiwire.toml`, content under `modules/common/`, `templates/common/`, and `mediawiki/common/` is synced only to `[[sites]]` entries that set `common = true`. On-wiki titles are the same as for a single site (the `common` segment is not part of the title). Use `common/` for things like Module:Arguments.
+> The `common` key works like a legacy shared site group. When `common = true` in `wikiwire.toml`, content under `modules/common/`, `templates/common/`, `mediawiki/common/`, and `bucket/common/` is synced only to `[[sites]]` entries that set `common = true`. On-wiki titles are the same as for a single site (the `common` segment is not part of the title). Use `common/` for things like Module:Arguments.
 >
 > If the `common` option is disabled or false in `wikiwire.toml`, the action will error when reading from `common/`.
 >
@@ -81,6 +82,7 @@ mediawiki/obbywiki.com/Common.js
 mediawiki/obbywiki.com/Common.css
 mediawiki/obbywiki.com/Citizen.js
 mediawiki/obbywiki.com/Sitenotice/ja
+bucket/obbywiki.com/MyBucket.json
 modules/shared/CommonUtil/CommonUtil.module.lua
 modules/shared-lang/Translate/Translate.module.lua
 ```
@@ -135,6 +137,8 @@ on:
       - 'templates/*'
       - 'mediawiki/**'
       - 'mediawiki/*'
+      - 'bucket/**'
+      - 'bucket/*'
 
 jobs:
   wikiwire:
@@ -180,6 +184,8 @@ You may also optionally enable:
 
 * Edit the MediaWiki namespace and sitewide/user JSON
 
+`Bucket:` pages require the `editbucket` right, which is included in **Edit protected pages** above. WikiWire does not check whether the [Bucket](https://github.com/weirdgloop/mediawiki-extensions-Bucket) extension is installed.
+
 Enable access for every IP address (0.0.0.0/0 and ::/0) as GitHub CI often rotates IP addresses.
 
 After creating a user account and password, edit your existing workflow and update the `username` parameter. It should look something like this:
@@ -198,7 +204,7 @@ After completing every step above, you should be ready to test WikiWire. Make an
 
 A common pattern is to keep production syncs on `push` to `main`, and run WikiWire with `dry_run: true` on pull requests so contributors can verify routing and titles in CI logs without editing the wiki.
 
-Non-`push` events do not provide commit compare data, so PR jobs must set `sync_all: override`. That walks every file under `modules/`, `templates/`, and `mediawiki/` in the checked-out workspace (not only files changed in the PR). With `dry_run: true`, WikiWire only logs planned edits and does not log in or call `action=edit`, so credentials are optional.
+Non-`push` events do not provide commit compare data, so PR jobs must set `sync_all: override`. That walks every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` in the checked-out workspace (not only files changed in the PR). With `dry_run: true`, WikiWire only logs planned edits and does not log in or call `action=edit`, so credentials are optional.
 
 Add a second workflow (for example `.github/workflows/wikiwire-dry-run.yml`):
 
@@ -214,6 +220,8 @@ on:
       - 'templates/*'
       - 'mediawiki/**'
       - 'mediawiki/*'
+      - 'bucket/**'
+      - 'bucket/*'
       - 'wikiwire.toml'
       - '.wikiwireignore'
 
@@ -270,6 +278,7 @@ For additional details, see the specification here.
 | `mediawiki` | `mediawiki/<path_segment>/<page>.<ext>` or `<page>` | `MediaWiki:<page>` | Inferred from file name (see below) |
 | `mediawiki` | `mediawiki/<path_segment>/<root>/doc.wikitext` | `MediaWiki:<root>/doc` | `wikitext` |
 | `mediawiki` | `mediawiki/<path_segment>/<root>/<nested path>` | `MediaWiki:<root>/<title path>` | See below |
+| `bucket` | `bucket/<path_segment>/<page>.json` | `Bucket:<page>` | `json` |
 
 ### Title path rules (nested files)
 
@@ -293,9 +302,9 @@ The same strip + collapse rules apply under `modules/` (e.g. `Bar/Bar.module.lua
 
 Most `MediaWiki:` pages have no subpages and live as flat files directly under `mediawiki/<path_segment>/` (for example `mediawiki/example.org/Sitenotice.wikitext` to `MediaWiki:Sitenotice`, `mediawiki/example.org/Common.js` to `MediaWiki:Common.js`). When a page does have subpages, use a directory: `mediawiki/example.org/Sitenotice/ja` to `MediaWiki:Sitenotice/ja`. The nested `mediawiki/<path_segment>/<root>/<root>.<ext>` layout is also still accepted.
 
-Templates synced to `Template:` must live under `templates/`, not `modules/`. MediaWiki namespace pages must live under `mediawiki/`. You can still use regular wikitext files under a template root like any other subpath.
+Templates synced to `Template:` must live under `templates/`, not `modules/`. MediaWiki namespace pages must live under `mediawiki/`. Bucket namespace pages must live under `bucket/`. You can still use regular wikitext files under a template root like any other subpath.
 
-Labels will be ignored on sync. Anything before the first colon (`:`) is considered a label (e.g., 'Label:Name' will simply be 'Name', which will then be synced to Module:Name because it is under the modules/ folder). This only counts for the first colon, and anything after will still be passed. This makes it easier to mark modules as imported while still syncing them.
+Labels will be ignored on sync. Anything before the first colon (`:`) is considered a label (e.g., 'Label:Name' will simply be 'Name', which will then be synced to Module:Name because it is under the modules/ folder). This only counts for the first colon, and anything after will still be passed. This makes it easier to mark modules as imported while still syncing them. The same label prefix works on `bucket/` filenames (`imported:MyBucket.json` syncs to `Bucket:MyBucket`).
 
 ### Content models (non-special files under `modules/`)
 
@@ -348,6 +357,18 @@ The main page is a flat file at `mediawiki/<path_segment>/<page>.<ext>` (or exte
 
 Editing `MediaWiki:` pages requires the bot password grant **Edit the MediaWiki namespace and sitewide/user JSON**.
 
+### Content models (files under `bucket/`)
+
+`Bucket:` pages are JSON schema definitions from the [Bucket](https://github.com/weirdgloop/mediawiki-extensions-Bucket) extension. WikiWire does not check whether the extension is installed or not, so ensure you have it before attempting to sync to that namespace. Files are expected to be flat `.json` files only, so `bucket/<path_segment>/MyBucket.json` becomes `Bucket:MyBucket` with content model `json`. The `.json` suffix is a repository extension and is not part of the on-wiki title. Nested paths are invalid because the namespace has no subpages.
+
+| Pattern | Content model |
+|---------|----------------|
+| `*.json` | `json` |
+| Nested path (e.g. `Foo/bar.json`) | (invalid; fails, or skipped when `ignore_content_model_errors = true`) |
+| Anything else | Error: unsupported extension (skipped when `ignore_content_model_errors = true`) |
+
+Editing `Bucket:` pages requires the `editbucket` right, which is included in the bot password grant **Edit protected pages**.
+
 
 ## Configuration: `wikiwire.toml`
 
@@ -360,9 +381,9 @@ Place at the repository root unless you override with the `config_path` action i
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
 | `version` | integer | no | Config schema version; default `1`. Reserved for future use. |
-| `shared` | boolean | no | If true, enables `modules/shared/`, `templates/shared/`, and `mediawiki/shared/`, synced to every `[[sites]]` entry. Default false. |
-| `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, and `mediawiki/common/`. Synced only to `[[sites]]` entries with `common = true`. Default false. |
-| `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Default false. |
+| `shared` | boolean | no | If true, enables `modules/shared/`, `templates/shared/`, `mediawiki/shared/`, and `bucket/shared/`, synced to every `[[sites]]` entry. Default false. |
+| `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, `mediawiki/common/`, and `bucket/common/`. Synced only to `[[sites]]` entries with `common = true`. Default false. |
+| `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Nested or non-`.json` files under `bucket/` are skipped. Default false. |
 | `delete_removed` | boolean | no | If true, delete on-wiki pages when the corresponding repo files are removed in a push. Also enabled by the action input of the same name. Removing a whole site or shared directory (e.g. `modules/<host>/`) is treated as a reorganization and does **not** mass-delete every module/template underneath it. Default false. |
 | `infer_page_existence` | boolean | no | If true, push-diff syncs (any sync job that doesn't use `sync_all`) skip the MediaWiki `page_exists` probe when GitHub reports a clear create vs modify status, roughly halving Action API round-trips per page which results in 2x speeds. Default false. |
 | `push_attribution` | boolean | no | If true, MediaWiki edit and delete summaries on `push` events include the GitHub user who pushed and a 7-character commit SHA when available (also shown on dry-run logs). Omitted for non-`push` events. Default false. |
@@ -372,12 +393,12 @@ Place at the repository root unless you override with the `config_path` action i
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
 | `id` | string | yes | Stable site key (sessions, logs). Must be unique across rows. |
-| `host` | string | no | Directory name under `modules/`, `templates/`, and `mediawiki/`. If omitted, defaults to `id`. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` value because those names are reserved for shared site groups. |
+| `host` | string | no | Directory name under `modules/`, `templates/`, `mediawiki/`, and `bucket/`. If omitted, defaults to `id`. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` value because those names are reserved for shared site groups. |
 | `api` | string | yes | Full MediaWiki API URL, e.g. `https://example.org/w/api.php`. |
 | `dry_run` | boolean | no | If true, only log planned edits/deletes; no write requests for this site. |
 | `default_branch` | string | no | If set, the action skips syncing when the workflow ref is not this branch (e.g. `refs/heads/main`). |
 | `css_content_model` | string | no | Content model for `*.css` files under `modules/`, `templates/`, and `mediawiki/`. Default `sanitized-css`. Some wikis need `css`. |
-| `common` | boolean | no | If true, this site receives content from `modules/common/`, `templates/common/`, and `mediawiki/common/` when top-level `common = true`. Default false. |
+| `common` | boolean | no | If true, this site receives content from `modules/common/`, `templates/common/`, `mediawiki/common/`, and `bucket/common/` when top-level `common = true`. Default false. |
 | `shared_groups` | array of strings | no | Named shared site groups this site belongs to. A path such as `modules/shared-lang/` targets every site whose `shared_groups` contains `lang`. |
 
 Example:
@@ -444,7 +465,7 @@ Please note that WikiWire is currently a BETA and this shouldn't be required in 
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits or deletes are sent (site-level `dry_run` in TOML still applies per site). |
 | `delete_removed` | no | `false` | If `true`, delete on-wiki pages when repo files are removed (also enabled by `delete_removed` in `wikiwire.toml`). Entire-folder removals are skipped. Requires special permissions. |
-| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, and `mediawiki/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
+| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
 
 `dark_lua_compat` was removed in WikiWire v0.3.0, and supplying it as a parameter will produce an error.
 
@@ -467,6 +488,8 @@ on:
       - 'templates/*'
       - 'mediawiki/**'
       - 'mediawiki/*'
+      - 'bucket/**'
+      - 'bucket/*'
 
 jobs:
   wikiwire:

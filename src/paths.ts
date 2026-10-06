@@ -1,15 +1,17 @@
+export type mapped_kind = 'module' | 'template' | 'mediawiki' | 'bucket';
+
 export type mapped_shared = {
     is_shared : true;
     title : string;
     content_model : string;
-    kind : 'module' | 'template' | 'mediawiki';
+    kind : mapped_kind;
 };
 
 export type mapped_site = {
     is_shared : false;
     title : string;
     content_model : string;
-    kind : 'module' | 'template' | 'mediawiki';
+    kind : mapped_kind;
 };
 
 export type mapped_path = mapped_shared | mapped_site;
@@ -120,6 +122,28 @@ function mediawiki_page_name_from_flat_filename(filename : string) : string {
     return filename;
 };
 
+function map_bucket_flat_file(filename : string, is_shared : boolean, ignore_content_model_errors : boolean, relative_path : string) : mapped_path | null {
+    if (!filename.endsWith('.json')) {
+        if (ignore_content_model_errors) { return null };
+        throw new Error( `WikiWire content model error: unsupported bucket file: ${filename} (allowed: <page>.json)` );
+    };
+
+    const raw_name = filename.slice(0, -'.json'.length);
+    if (raw_name.length === 0) {
+        if (ignore_content_model_errors) { return null };
+        throw new Error( `WikiWire: ${relative_path}: bucket page name must not be empty` );
+    };
+
+    const wiki_name = wiki_name_from_root(raw_name);
+
+    return {
+        is_shared,
+        title: `Bucket:${wiki_name}`,
+        content_model: 'json',
+        kind: 'bucket',
+    };
+};
+
 function map_mediawiki_flat_file(filename : string, is_shared : boolean, css_content_model : string, ignore_content_model_errors : boolean, relative_path : string) : mapped_path | null {
     if (filename.endsWith('.template.wikitext')) {
         if (ignore_content_model_errors) { return null };
@@ -227,10 +251,23 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
     if (parts.length === 0) { return null };
 
     const root = parts[0];
-    if (root !== 'modules' && root !== 'templates' && root !== 'mediawiki') { return null };
+    if (root !== 'modules' && root !== 'templates' && root !== 'mediawiki' && root !== 'bucket') { return null };
 
     const path_segment = parts[1];
     const is_shared = parse_shared_path_segment(path_segment) !== null;
+
+    if (root === 'bucket') {
+        if (parts.length === 3) {
+            return map_bucket_flat_file(parts[2], is_shared, ignore_content_model_errors, relative_path);
+        };
+
+        if (parts.length < 3) {
+            throw new Error( `WikiWire: path too shallow (need bucket/<path_segment>/<page>.json): ${relative_path}` );
+        };
+
+        if (ignore_content_model_errors) { return null };
+        throw new Error( `WikiWire: ${relative_path}: Bucket pages do not support subpages (use bucket/<path_segment>/<page>.json)` );
+    };
 
     if (root === 'mediawiki' && parts.length === 3) {
         return map_mediawiki_flat_file(parts[2], is_shared, css_content_model, ignore_content_model_errors, relative_path);

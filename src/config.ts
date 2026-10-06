@@ -95,8 +95,8 @@ export function load_config(config_path : string) : { schema_version : number; s
         path_segment = s.host.trim();
 
         if (path_segment.length === 0) { throw new Error(`WikiWire: site "${s.id}" host must not be empty`); };
-        if (shared_enabled && path_segment === 'shared') { throw new Error( `WikiWire config error: site "${s.id}" cannot use path segment "shared" when shared = true (reserved for modules/shared, templates/shared, and mediawiki/shared)`, ); };
-        if (common_enabled && path_segment === 'common') { throw new Error( `WikiWire config error: site "${s.id}" cannot use path segment "common" when common = true (reserved for modules/common, templates/common, and mediawiki/common)`, ); };
+        if (shared_enabled && path_segment === 'shared') { throw new Error( `WikiWire config error: site "${s.id}" cannot use path segment "shared" when shared = true (reserved for modules/shared, templates/shared, mediawiki/shared, and bucket/shared)`, ); };
+        if (common_enabled && path_segment === 'common') { throw new Error( `WikiWire config error: site "${s.id}" cannot use path segment "common" when common = true (reserved for modules/common, templates/common, mediawiki/common, and bucket/common)`, ); };
         if (/^shared-.+/.test(path_segment)) { throw new Error( `WikiWire config error: site "${s.id}" cannot use path segment "${path_segment}" because shared site groups reserve all "shared-*" directory names`, ); };
 
         if (path_to_site.has(path_segment)) {

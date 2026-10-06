@@ -6,7 +6,7 @@ icon: lucide/git-pull-request-arrow
 
 A common pattern is to keep production syncs on `push` to `main`, and run WikiWire with `dry_run: true` on pull requests so contributors can verify routing and titles in CI logs without editing the wiki.
 
-Non-`push` events do not provide commit compare data, so PR jobs must set `sync_all: override`. That walks every file under `modules/`, `templates/`, and `mediawiki/` in the checked-out workspace (not only files changed in the PR). With `dry_run: true`, WikiWire only logs planned edits and does not log in or call `action=edit`, so credentials are optional.
+Non-`push` events do not provide commit compare data, so PR jobs must set `sync_all: override`. That walks every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` in the checked-out workspace (not only files changed in the PR). With `dry_run: true`, WikiWire only logs planned edits and does not log in or call `action=edit`, so credentials are optional.
 
 Add a second workflow (for example `.github/workflows/wikiwire-dry-run.yml`):
 
@@ -24,6 +24,8 @@ on:
       - 'templates/*'
       - 'mediawiki/**'
       - 'mediawiki/*'
+      - 'bucket/**'
+      - 'bucket/*'
 
 jobs:
   wikiwire-dry-run:

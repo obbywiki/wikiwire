@@ -4,7 +4,7 @@ icon: lucide/info
 
 # Get started
 
-WikiWire is a powerful CI automation tool that can automatically upload modules, templates, and MediaWiki namespace pages from your Git repositories to the live on-wiki versions in just seconds after each commit. With minimal setup, you can start syncing your GitHub repository to MediaWiki today. WikiWire is a completely free to use GitHub Action developed by the [Obby Wiki](https://obby.wiki).
+WikiWire is a powerful CI automation tool that can automatically upload modules, templates, MediaWiki namespace pages, and Bucket schema pages from your Git repositories to the live on-wiki versions in just seconds after each commit. With minimal setup, you can start syncing your GitHub repository to MediaWiki today. WikiWire is a completely free to use GitHub Action developed by the [Obby Wiki](https://obby.wiki).
 
 ## Compatibility
 
@@ -26,7 +26,7 @@ WikiWire is a CI action you can add to your repository's CI as a new workflow, o
 
 ## Required repository layout
 
-To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced unless at least one of `modules/`, `templates/`, or `mediawiki/` exists in your repository.
+To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced unless at least one of `modules/`, `templates/`, `mediawiki/`, or `bucket/` exists in your repository.
 
 ```sh
 .
@@ -38,11 +38,12 @@ To get started, ensure your repository matches the correct layout that WikiWire 
 └─ .wikiwireignore
 ```
 
-As seen above, WikiWire expects `modules/`, `templates/`, and `mediawiki/` at the repository root. Paths outside these folders are ignored.
+As seen above, WikiWire expects `modules/`, `templates/`, `mediawiki/`, and `bucket/` at the repository root. Paths outside these folders are ignored.
 
 - **Modules:** `modules/<host|id>/<name>/...`
 - **Templates:** `templates/<host|id>/<name>/...`
 - **MediaWiki namespace:** `mediawiki/<host|id>/<page>.<ext>` (flat files), or `mediawiki/<host|id>/<page>/...` when a page has subpages
+- **Bucket namespace:** `bucket/<host|id>/<page>.json` (flat files only; `.json` is stripped from the on-wiki title)
 
 !!! tip
   Nested files map to subpages: title suffixes (`.template.wikitext`, `.module.lua` / `.module.luau`, `.wikitext`) are stripped from the on-wiki title, and an index file whose basename matches its parent folder collapses (e.g. `templates/.../Segment1/Segment2/Segment3.wikitext` resolves as `Template:Segment1/Segment2/Segment3`, `.../Segment1/Segment1.template.wikitext` goes to `Template:ArticleFlow/Segment1`). `.css` / `.js` / `.json` keep their extensions in the title.
@@ -53,16 +54,16 @@ Ideally `<host|id>` is the site’s `host` in `wikiwire.toml`, but it can also b
 
     The `shared` key is a special key that can only be used as the shared directory when enabled in `wikiwire.toml`. 
 
-    Content under `modules/shared/`, `templates/shared/`, and `mediawiki/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). 
+    Content under `modules/shared/`, `templates/shared/`, `mediawiki/shared/`, and `bucket/shared/` are synced to **every** configured site. On-wiki titles are the same as for a single site (the `shared` segment is not part of the title). 
 
     If the `shared` option is disabled or false in `wikiwire.toml`, the action will error when reading from `shared/`.
 
     If you want to name a subfolder "shared" but don't want to trigger WikiWire, name the folder `_shared` instead. 
-    Any path under `modules/`, `templates/`, or `mediawiki/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
+    Any path under `modules/`, `templates/`, `mediawiki/`, or `bucket/` that contains a **path component starting with `_`** is skipped (not synced). Examples: `modules/_legacy/...`, `modules/example.com/MyModule/_draft/example.wikitext`, `modules/example.com/shared/_imported/...`.
 
-    Shared site groups use path segments like `shared-lang` or `shared-public`. Content under `modules/shared-lang/`, `templates/shared-lang/`, and `mediawiki/shared-lang/` is synced only to sites whose `shared_groups` includes `lang`. On-wiki titles are the same as for a single site.
+    Shared site groups use path segments like `shared-lang` or `shared-public`. Content under `modules/shared-lang/`, `templates/shared-lang/`, `mediawiki/shared-lang/`, and `bucket/shared-lang/` is synced only to sites whose `shared_groups` includes `lang`. On-wiki titles are the same as for a single site.
 
-    The `common` key works like a legacy shared site group. When `common = true` in `wikiwire.toml`, content under `modules/common/`, `templates/common/`, and `mediawiki/common/` is synced only to `[[sites]]` entries that set `common = true`. On-wiki titles are the same as for a single site (the `common` segment is not part of the title).
+    The `common` key works like a legacy shared site group. When `common = true` in `wikiwire.toml`, content under `modules/common/`, `templates/common/`, `mediawiki/common/`, and `bucket/common/` is synced only to `[[sites]]` entries that set `common = true`. On-wiki titles are the same as for a single site (the `common` segment is not part of the title).
 
     If the `common` option is disabled or false in `wikiwire.toml`, the action will error when reading from `common/`.
 
@@ -83,6 +84,7 @@ mediawiki/obbywiki.com/Sitenotice.wikitext
 mediawiki/obbywiki.com/Common.js
 mediawiki/obbywiki.com/Common.css
 mediawiki/obbywiki.com/Sitenotice/ja
+bucket/obbywiki.com/MyBucket.json
 modules/shared/CommonUtil/CommonUtil.module.lua
 modules/shared-lang/Translate/Translate.module.lua
 ```
@@ -138,6 +140,8 @@ on:
       - 'templates/*'
       - 'mediawiki/**'
       - 'mediawiki/*'
+      - 'bucket/**'
+      - 'bucket/*'
 
 jobs:
   wikiwire:
@@ -183,6 +187,8 @@ You may also optionally enable:
 
 * Edit the MediaWiki namespace and sitewide/user JSON
 
+`Bucket:` pages require the `editbucket` right, which is included in **Edit protected pages** above. WikiWire does not check whether the [Bucket](https://github.com/weirdgloop/mediawiki-extensions-Bucket) extension is installed or not.
+
 Enable access for every IP address (0.0.0.0/0 and ::/0) as GitHub CI often rotates IP addresses.
 
 After creating a user account and password, edit your existing workflow and update the `username` parameter. It should look something like this:
@@ -195,7 +201,7 @@ Next, upload your bot password as a secret into your GitHub repository. For help
 
 ## Testing the workflow
 
-After completing every step above, you should be ready to test WikiWire. Make any change to a module, template, or MediaWiki configuration page and WikiWire should automatically sync it if everything is correct. To test your layout before actually syncing content, use the `dry_run` parameter.
+After completing every step above, you should be ready to test WikiWire. Make any change to a module, template, MediaWiki configuration page, or Bucket schema and WikiWire should automatically sync it if everything is correct. To test your layout before actually syncing content, use the `dry_run` parameter.
 
 If you are having trouble setting up WikiWire, use our repository as a guide: https://github.com/obbywiki/modules.
 

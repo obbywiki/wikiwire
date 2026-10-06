@@ -16,7 +16,7 @@ version = 1
 
 ## shared (boolean)
 
-Whether to enable the global shared folder or not. If set to false, WikiWire will throw an error whenever it reads the `/shared` directory of `modules/`, `templates/`, or `mediawiki/`. When enabled, content under those directories is synced to every configured site.
+Whether to enable the global shared folder or not. If set to false, WikiWire will throw an error whenever it reads the `/shared` directory of `modules/`, `templates/`, `mediawiki/`, or `bucket/`. When enabled, content under those directories is synced to every configured site.
 
 ```
 shared = false
@@ -24,7 +24,7 @@ shared = false
 
 ## common (boolean)
 
-Whether to enable the legacy `common` shared group folder or not. If set to false, WikiWire will throw an error whenever it reads the `/common` directory of `modules/`, `templates/`, or `mediawiki/`. When enabled, content is synced only to `[[sites]]` entries that set `common = true`.
+Whether to enable the legacy `common` shared group folder or not. If set to false, WikiWire will throw an error whenever it reads the `/common` directory of `modules/`, `templates/`, `mediawiki/`, or `bucket/`. When enabled, content is synced only to `[[sites]]` entries that set `common = true`.
 
 ```
 common = false
@@ -32,7 +32,7 @@ common = false
 
 ## ignore_content_model_errors (boolean)
 
-If true, files under `modules/`, `templates/`, or `mediawiki/` with unsupported extensions (for example `README.md`) are skipped instead of failing the sync. Scribunto files must still use `.module.lua` or `.module.luau`, however, as bare `.lua` or `.luau` extensions will always trigger an error, as will `.module.lua`/`.module.luau` files under `templates/` or `mediawiki/`.
+If true, files under `modules/`, `templates/`, `mediawiki/`, or `bucket/` with unsupported extensions (for example `README.md`) are skipped instead of failing the sync. Scribunto files must still use `.module.lua` or `.module.luau`, however, as bare `.lua` or `.luau` extensions will always trigger an error, as will `.module.lua`/`.module.luau` files under `templates/` or `mediawiki/`. Nested paths and non-`.json` files under `bucket/` are skipped.
 
 ```
 ignore_content_model_errors = true
@@ -42,7 +42,7 @@ ignore_content_model_errors = true
 
 If true, WikiWire deletes on-wiki pages when the corresponding repo files are removed in a push diff. Also enabled when the GitHub Action input `delete_removed` is `true`. Default false.
 
-Removing a whole site or shared directory (`modules/<host>/`, `templates/shared/`, `mediawiki/shared-lang/`, and so on, with no files left under it) is treated as a repository reorganization: those deletes are skipped with a warning. Removing individual files, including the last file of a module or subpage folder, still deletes the corresponding pages.
+Removing a whole site or shared directory (`modules/<host>/`, `templates/shared/`, `mediawiki/shared-lang/`, `bucket/<host>/`, and so on, with no files left under it) is treated as a repository reorganization: those deletes are skipped with a warning. Removing individual files, including the last file of a module or subpage folder, still deletes the corresponding pages.
 
 `sync_all: override` never performs deletes. Ignored paths are never deleted on the wiki.
 
@@ -86,7 +86,7 @@ Stable site key (sessions, logs). Must be unique across rows.
 
 ### host (string)
 
-Directory name under `modules/`, `templates/`, and `mediawiki/`. If omitted, defaults to id. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` name because those path segments are reserved for shared site groups.
+Directory name under `modules/`, `templates/`, `mediawiki/`, and `bucket/`. If omitted, defaults to id. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` name because those path segments are reserved for shared site groups.
 
 ### api (string) (required)
 
@@ -106,11 +106,11 @@ Content model for `*.css` files under `modules/`, `templates/`, and `mediawiki/`
 
 ### common (boolean)
 
-If true, this site receives content from `modules/common/`, `templates/common/`, and `mediawiki/common/` when top-level `common = true`. This is also treated as membership in the `common` shared group for backward compatibility. Default false.
+If true, this site receives content from `modules/common/`, `templates/common/`, `mediawiki/common/`, and `bucket/common/` when top-level `common = true`. This is also treated as membership in the `common` shared group for backward compatibility. Default false.
 
 ### shared_groups (array of strings)
 
-Named shared site groups that this site belongs to. A path segment of the form `shared-<group>` under `modules/`, `templates/`, or `mediawiki/` syncs to every site whose `shared_groups` contains that group name.
+Named shared site groups that this site belongs to. A path segment of the form `shared-<group>` under `modules/`, `templates/`, `mediawiki/`, or `bucket/` syncs to every site whose `shared_groups` contains that group name.
 
 Example:
 
@@ -130,6 +130,18 @@ Most `MediaWiki:` pages are flat files directly under `mediawiki/<host|id>/`. Us
 | `mediawiki/example.com/Sitenotice/ja` | `MediaWiki:Sitenotice/ja` | `wikitext` |
 
 Allowed flat file names: `<page>`, `<page>.wikitext`, `<page>.js`, `<page>.css`, `<page>.json`. Subpages map 1:1 by relative path under `<page>/`. Editing these pages requires the bot password grant **Edit the MediaWiki namespace and sitewide/user JSON**.
+
+## bucket/ layout
+
+`Bucket:` pages are flat JSON files under `bucket/<host|id>/`. Unlike in other namespaces, the `.json` suffix is just in the repository extension only and is not part of the on-wiki title. Nested directories are not allowed because the namespace has no subpages. WikiWire does not check whether the [Bucket](https://github.com/weirdgloop/mediawiki-extensions-Bucket) extension is installed or not.
+
+| Repository path | Wiki title | Content model |
+|-----------------|------------|---------------|
+| `bucket/example.com/MyBucket.json` | `Bucket:MyBucket` | `json` |
+| `bucket/example.com/imported:MyBucket.json` | `Bucket:MyBucket` | `json` |
+| `bucket/shared/MyBucket.json` | `Bucket:MyBucket` (every site, when `shared = true`) | `json` |
+
+Allowed flat file names: `<page>.json`. Editing these pages requires the `editbucket` right, included in the bot password grant **Edit protected pages**.
 
 # Configuration example
 
@@ -160,7 +172,7 @@ shared_groups = ["lang", "staging"]
 
 ```
 
-With the config above, content under `modules/shared-lang/`, `templates/shared-lang/`, or `mediawiki/shared-lang/` syncs to both sites, while `modules/common/` still syncs only to sites that set `common = true`.
+With the config above, content under `modules/shared-lang/`, `templates/shared-lang/`, `mediawiki/shared-lang/`, or `bucket/shared-lang/` syncs to both sites, while `modules/common/` still syncs only to sites that set `common = true`.
 
 # GitHub Action inputs
 
@@ -173,7 +185,7 @@ With the config above, content under `modules/shared-lang/`, `templates/shared-l
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits or deletes are sent (site-level `dry_run` in TOML still applies per site). |
 | `delete_removed` | no | `false` | If `true`, delete on-wiki pages when repo files are removed (also enabled by `delete_removed` in `wikiwire.toml`). Entire-folder removals are skipped. Requires special permissions. |
-| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, and `mediawiki/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
+| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
 
 `dark_lua_compat` was removed in WikiWire v0.3.0, and supplying it as a parameter will produce an error.
 
