@@ -84,7 +84,7 @@ mediawiki/obbywiki.com/Sitenotice.wikitext
 mediawiki/obbywiki.com/Common.js
 mediawiki/obbywiki.com/Common.css
 mediawiki/obbywiki.com/Sitenotice/ja
-bucket/obbywiki.com/MyBucket.json
+bucket/obbywiki.com/Obby.json
 modules/shared/CommonUtil/CommonUtil.module.lua
 modules/shared-lang/Translate/Translate.module.lua
 ```

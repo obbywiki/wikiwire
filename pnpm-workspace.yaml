@@ -5,5 +5,8 @@ ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
 
+allowBuilds:
+  esbuild: true
+
 minimumReleaseAge: 1440
 blockExoticSubdeps: true
