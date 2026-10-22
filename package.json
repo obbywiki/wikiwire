@@ -23,7 +23,7 @@
     "@actions/core": "^3.0.0",
     "@actions/github": "^9.0.0",
     "@iarna/toml": "^2.2.5",
-    "ignore": "^7.0.5"
+    "ignore": "^7.0.12"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.10",
