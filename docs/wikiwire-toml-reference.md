@@ -30,6 +30,16 @@ Whether to enable the legacy `common` shared group folder or not. If set to fals
 common = false
 ```
 
+## src (boolean)
+
+If true, WikiWire reads `src/modules/`, `src/templates/`, `src/mediawiki/`, and `src/bucket/` instead of the same folders at the repository root. Mapping is otherwise identical: `src/modules/` still becomes `Module:`, `src/templates/` still becomes `Template:`, and so on. Default false.
+
+Only one layout can be used at a time. WikiWire never reads both. If `src = true` and `modules/`, `templates/`, `mediawiki/`, or `bucket/` also exist at the repository root, it fails rather than mixing them.
+
+```
+src = true
+```
+
 ## ignore_content_model_errors (boolean)
 
 If true, files under `modules/`, `templates/`, `mediawiki/`, or `bucket/` with unsupported extensions (for example `README.md`) are skipped instead of failing the sync. Scribunto files must still use `.module.lua` or `.module.luau`, however, as bare `.lua` or `.luau` extensions will always trigger an error, as will `.module.lua`/`.module.luau` files under `templates/` or `mediawiki/`. Nested paths and non-`.json` files under `bucket/` are skipped.
@@ -86,7 +96,7 @@ Stable site key (sessions, logs). Must be unique across rows.
 
 ### host (string)
 
-Directory name under `modules/`, `templates/`, `mediawiki/`, and `bucket/`. If omitted, defaults to id. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` name because those path segments are reserved for shared site groups.
+Directory name under `modules/`, `templates/`, `mediawiki/`, and `bucket/` (or `src/modules/`, `src/templates/`, `src/mediawiki/`, and `src/bucket/` when `src = true`). If omitted, defaults to id. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` name because those path segments are reserved for shared site groups.
 
 ### api (string) (required)
 
@@ -185,7 +195,7 @@ With the config above, content under `modules/shared-lang/`, `templates/shared-l
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits or deletes are sent (site-level `dry_run` in TOML still applies per site). |
 | `delete_removed` | no | `false` | If `true`, delete on-wiki pages when repo files are removed (also enabled by `delete_removed` in `wikiwire.toml`). Entire-folder removals are skipped. Requires special permissions. |
-| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
+| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` (or `src/modules/`, `src/templates/`, `src/mediawiki/`, and `src/bucket/` when `src = true`) from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
 
 `dark_lua_compat` was removed in WikiWire v0.3.0, and supplying it as a parameter will produce an error.
 

@@ -1,5 +1,16 @@
 export type mapped_kind = 'module' | 'template' | 'mediawiki' | 'bucket';
 
+export const CONTENT_ROOTS = ['modules', 'templates', 'mediawiki', 'bucket'] as const;
+export type content_root = (typeof CONTENT_ROOTS)[number];
+
+export function is_content_root(value : string) : value is content_root {
+    return (CONTENT_ROOTS as readonly string[]).includes(value);
+};
+
+export function content_root_rel(root : content_root, src : boolean) : string {
+    return src ? `src/${root}` : root;
+};
+
 export type mapped_shared = {
     is_shared : true;
     title : string;
@@ -242,16 +253,25 @@ export function content_model_for_repo_subfile(rel_under_root : string, css_cont
     throw new Error( `WikiWire content model error: unsupported subfile extension: ${rel_under_root} (allowed: .module.lua, .module.luau, .wikitext, .css, .json). *.module.lua/*.module.luau files are only allowed under modules/)`, );
 }
 
-export function map_repo_path(relative_path : string, options: { css_content_model ?: string; ignore_content_model_errors ?: boolean } = {}) : mapped_path | null {
+export function map_repo_path(relative_path : string, options: { css_content_model ?: string; ignore_content_model_errors ?: boolean; src ?: boolean } = {}) : mapped_path | null {
     const css_content_model = options.css_content_model ?? 'sanitized-css';
     const ignore_content_model_errors = options.ignore_content_model_errors ?? false;
+    const src = options.src ?? false;
+    const layout_prefix = src ? 'src/' : '';
     const normalized = relative_path.replace(/\\/g, '/').replace(/^\/+/, '');
 
-    const parts = normalized.split('/').filter(Boolean);
-    if (parts.length === 0) { return null };
+    const raw_parts = normalized.split('/').filter(Boolean);
+    if (raw_parts.length === 0) { return null };
+
+    let parts = raw_parts;
+    if (src) {
+        if (parts[0] !== 'src') { return null };
+        parts = parts.slice(1);
+    };
 
     const root = parts[0];
-    if (root !== 'modules' && root !== 'templates' && root !== 'mediawiki' && root !== 'bucket') { return null };
+    if (!is_content_root(root)) { return null };
+    if (parts.length < 2) { return null };
 
     const path_segment = parts[1];
     const is_shared = parse_shared_path_segment(path_segment) !== null;
@@ -262,11 +282,11 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
         };
 
         if (parts.length < 3) {
-            throw new Error( `WikiWire: path too shallow (need bucket/<path_segment>/<page>.json): ${relative_path}` );
+            throw new Error( `WikiWire: path too shallow (need ${layout_prefix}bucket/<path_segment>/<page>.json): ${relative_path}` );
         };
 
         if (ignore_content_model_errors) { return null };
-        throw new Error( `WikiWire: ${relative_path}: Bucket pages do not support subpages (use bucket/<path_segment>/<page>.json)` );
+        throw new Error( `WikiWire: ${relative_path}: Bucket pages do not support subpages (use ${layout_prefix}bucket/<path_segment>/<page>.json)` );
     };
 
     if (root === 'mediawiki' && parts.length === 3) {
@@ -275,8 +295,8 @@ export function map_repo_path(relative_path : string, options: { css_content_mod
 
     if (parts.length < 4) {
         const expected = root === 'mediawiki'
-            ? `${root}/<path_segment>/<file> or ${root}/<path_segment>/<root_name>/<file>`
-            : `${root}/<path_segment>/<root_name>/<file>`;
+            ? `${layout_prefix}${root}/<path_segment>/<file> or ${layout_prefix}${root}/<path_segment>/<root_name>/<file>`
+            : `${layout_prefix}${root}/<path_segment>/<root_name>/<file>`;
         throw new Error( `WikiWire: path too shallow (need ${expected}): ${relative_path}` );
     };
 

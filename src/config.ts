@@ -31,6 +31,7 @@ type root_config = {
   version ?: unknown;
   shared ?: unknown;
   common ?: unknown;
+  src ?: unknown;
   ignore_content_model_errors ?: unknown;
   delete_removed ?: unknown;
   infer_page_existence ?: unknown;
@@ -38,7 +39,7 @@ type root_config = {
   sites ?: unknown;
 };
 
-export function load_config(config_path : string) : { schema_version : number; shared : boolean; common : boolean; ignore_content_model_errors : boolean; delete_removed : boolean; infer_page_existence : boolean; push_attribution : boolean; sites : Map<string, site_config>; path_to_site : Map<string, site_config> } {
+export function load_config(config_path : string) : { schema_version : number; shared : boolean; common : boolean; src : boolean; ignore_content_model_errors : boolean; delete_removed : boolean; infer_page_existence : boolean; push_attribution : boolean; sites : Map<string, site_config>; path_to_site : Map<string, site_config> } {
     const raw = fs.readFileSync(config_path, 'utf8');
     const data = TOML.parse(raw) as root_config;
 
@@ -115,6 +116,7 @@ export function load_config(config_path : string) : { schema_version : number; s
         schema_version: typeof data.version === 'number' ? data.version : 1,
         shared: shared_enabled,
         common: common_enabled,
+        src: Boolean(data.src),
         ignore_content_model_errors: Boolean(data.ignore_content_model_errors),
         delete_removed: Boolean(data.delete_removed),
         infer_page_existence: Boolean(data.infer_page_existence),

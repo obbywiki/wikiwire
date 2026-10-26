@@ -26,7 +26,7 @@ WikiWire is a CI action you can add to your repository's CI as a new workflow, o
 
 ## Required repository layout
 
-To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced unless at least one of `modules/`, `templates/`, `mediawiki/`, or `bucket/` exists in your repository.
+To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced unless at least one of `modules/`, `templates/`, `mediawiki/`, or `bucket/` exists in your repository (or under `src/` if configured).
 
 ```sh
 .
@@ -157,6 +157,8 @@ jobs:
           password: ${{ secrets.WIKI_PASSWORD }}
           # dry_run: true # if you want to test your configs and routing first
 ```
+
+If `src = true`, watch `src/modules/**`, `src/templates/**`, `src/mediawiki/**`, and `src/bucket/**` in `on.push.paths` instead of the repository-root folders.
 
 This workflow assumes two things:
 

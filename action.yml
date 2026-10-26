@@ -34,7 +34,7 @@ inputs:
     required: false
     default: "false"
   sync_all:
-    description: NOT RECOMMENDED FOR MOST USE-CASES! If true ("override"), sync all files under modules/, templates/, mediawiki/, and bucket/ from the workspace instead of commit diffs (use for workflow_dispatch or full sync)
+    description: NOT RECOMMENDED FOR MOST USE-CASES! If true ("override"), sync all files under modules/, templates/, mediawiki/, and bucket/ (or src/modules, src/templates, src/mediawiki, and src/bucket when src = true) from the workspace instead of commit diffs (use for workflow_dispatch or full sync)
     required: false
     default: "false"
 

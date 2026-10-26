@@ -5,13 +5,11 @@ import path from 'node:path';
 import ignore from 'ignore';
 
 import { load_config, type site_config } from './config';
-import { map_repo_path, parse_shared_path_segment, type mapped_path } from './paths';
+import { CONTENT_ROOTS, content_root_rel, is_content_root, map_repo_path, parse_shared_path_segment, type mapped_path } from './paths';
 import { mw_page_error, mw_session, type existence_hint } from './mediawiki';
 import { parse_site_credentials } from './site_credentials';
 
 import type { Ignore } from 'ignore';
-
-const REPO_ROOTS = ['modules', 'templates', 'mediawiki', 'bucket'] as const;
 
 type push_payload = { after ?: string; before ?: string; pusher ?: { name ?: string } };
 
@@ -128,8 +126,31 @@ function prefix_has_remaining_files(workspace : string, dir_rel : string) : bool
     return found.length > 0;
 };
 
+function modules_prefix(src : boolean) : string {
+    return `${content_root_rel('modules', src)}/`;
+};
+
+function is_content_file(file : string, src : boolean) : boolean {
+    return CONTENT_ROOTS.some((root) => file.startsWith(`${content_root_rel(root, src)}/`));
+};
+
+function assert_exclusive_content_layout(workspace : string, src : boolean) : void {
+    if (!src) { return };
+
+    const root_layout : string[] = [];
+    for (const root of CONTENT_ROOTS) {
+        if (fs.existsSync(path.join(workspace, root))) {
+            root_layout.push(`${root}/`);
+        };
+    };
+
+    if (root_layout.length === 0) { return };
+
+    throw new Error( `WikiWire: src = true, but also found ${root_layout.join(' ')} at the repository root. Use either src/{modules,templates,mediawiki,bucket} or the same folders at the repository root, not both.` );
+};
+
 // sync sibling paths. e.g., if example.module.lua was generated from example.module.luau, sync example.module.lua
-function add_sibling_lua_edits(changes : path_change[], workspace : string) : path_change[] {
+function add_sibling_lua_edits(changes : path_change[], workspace : string, src : boolean) : path_change[] {
     const seen = new Set<string>();
     const out : path_change[] = [];
 
@@ -143,7 +164,7 @@ function add_sibling_lua_edits(changes : path_change[], workspace : string) : pa
 
     for (const c of changes) {
         if (c.kind !== 'edit') { continue };
-        if (!c.file.startsWith('modules/') || !c.file.endsWith('.module.luau')) { continue };
+        if (!c.file.startsWith(modules_prefix(src)) || !c.file.endsWith('.module.luau')) { continue };
 
         const sibling = c.file.replace(/\.module\.luau$/, '.module.lua');
         if (!fs.existsSync(path.join(workspace, sibling))) { continue };
@@ -206,21 +227,23 @@ function changes_from_gh_files(files : gh_file[], delete_removed : boolean) : pa
     return out;
 };
 
-function site_segment_dir(file : string) : string | null {
+function site_segment_dir(file : string, src : boolean) : string | null {
     const parts = file.split('/').filter(Boolean);
+    const offset = src ? 1 : 0;
 
-    if (parts.length < 3) { return null };
-    if (!(REPO_ROOTS as readonly string[]).includes(parts[0])) { return null };
+    if (src && parts[0] !== 'src') { return null };
+    if (parts.length < 3 + offset) { return null };
+    if (!is_content_root(parts[offset])) { return null };
 
-    return `${parts[0]}/${parts[1]}`;
+    return parts.slice(0, 2 + offset).join('/');
 };
 
-function filter_reorg_deletes(delete_files : string[], workspace : string) : string[] {
+function filter_reorg_deletes(delete_files : string[], workspace : string, src : boolean) : string[] {
     const by_segment = new Map<string, string[]>();
     const kept : string[] = [];
 
     for (const file of delete_files) {
-        const segment_dir = site_segment_dir(file);
+        const segment_dir = site_segment_dir(file, src);
 
         if (!segment_dir) { kept.push(file); continue };
 
@@ -242,14 +265,14 @@ function filter_reorg_deletes(delete_files : string[], workspace : string) : str
     return kept;
 };
 
-async function list_changed_paths(opts : { workspace : string; sync_all : boolean; ign : Ignore; delete_removed : boolean }) : Promise<path_change[]> {
-    const { workspace, sync_all, ign, delete_removed } = opts;
+async function list_changed_paths(opts : { workspace : string; sync_all : boolean; ign : Ignore; delete_removed : boolean; src : boolean }) : Promise<path_change[]> {
+    const { workspace, sync_all, ign, delete_removed, src } = opts;
 
     if (sync_all) {
         const out: string[] = [];
 
-        for (const root of REPO_ROOTS) {
-            walk_files(path.join(workspace, root), workspace, out);
+        for (const root of CONTENT_ROOTS) {
+            walk_files(path.join(workspace, content_root_rel(root, src)), workspace, out);
         };
 
         return out
@@ -283,7 +306,7 @@ async function list_changed_paths(opts : { workspace : string; sync_all : boolea
     };
 
     let changes = changes_from_gh_files(gh_files, delete_removed);
-    changes = add_sibling_lua_edits(changes, workspace);
+    changes = add_sibling_lua_edits(changes, workspace, src);
 
     return changes.filter((c) => !ign.ignores(c.file));
 };
@@ -305,9 +328,12 @@ async function run() : Promise<void> {
 
     if (!fs.existsSync(full_config)) { throw new Error(`WikiWire config error: config not found: ${full_config}`); };
 
-    const { sites, shared : shared_enabled, common : common_enabled, ignore_content_model_errors, delete_removed : config_delete_removed, infer_page_existence, push_attribution, path_to_site } = load_config(full_config);
+    const { sites, shared : shared_enabled, common : common_enabled, src, ignore_content_model_errors, delete_removed : config_delete_removed, infer_page_existence, push_attribution, path_to_site } = load_config(full_config);
     const attribution = push_attribution ? push_attribution_suffix() : '';
     const delete_removed = input_delete_removed || config_delete_removed;
+
+    assert_exclusive_content_layout(workspace, src);
+    if (src) { core.info('WikiWire: using src/ content layout (src/modules, src/templates, src/mediawiki, src/bucket)'); };
 
     for (const cred_site_id of site_creds_map.keys()) {
         if (!sites.has(cred_site_id)) { core.warning( `WikiWire: parameter \`site_credentials\` has key "${cred_site_id}" which is not a site id listed in wikiwire.toml` ); };
@@ -321,10 +347,10 @@ async function run() : Promise<void> {
         ign = ign.add(fs.readFileSync(full_ignore, 'utf8'));
     };
 
-    const changed = await list_changed_paths({ workspace, sync_all, ign, delete_removed });
+    const changed = await list_changed_paths({ workspace, sync_all, ign, delete_removed, src });
 
     const delete_candidates = changed.filter((c) => c.kind === 'delete').map((c) => c.file);
-    const allowed_deletes = new Set(filter_reorg_deletes(delete_candidates, workspace));
+    const allowed_deletes = new Set(filter_reorg_deletes(delete_candidates, workspace, src));
 
     const jobs : sync_job[] = [];
 
@@ -333,16 +359,17 @@ async function run() : Promise<void> {
         const kind = change.kind === 'delete' && allowed_deletes.has(file) ? 'delete' : change.kind === 'delete' ? null : 'edit';
         if (!kind) { continue };
 
-        if (!REPO_ROOTS.some((root) => file.startsWith(`${root}/`))) { continue };
+        if (!is_content_file(file, src)) { continue };
 
         const parts = file.split('/').filter(Boolean);
         if (parts.some((p) => p.startsWith('_'))) { core.info(`WikiWire: skipped path with underscore prepended: "${file}"`); continue };
 
-        const path_segment = parts[1];
+        const logical_parts = src ? parts.slice(1) : parts;
+        const path_segment = logical_parts[1];
 
         const shared_targets = resolve_shared_targets(path_segment, sites, { shared_enabled, common_enabled });
         if (shared_targets) {
-            if (shared_targets.targets.length === 0) { throw new Error(`WikiWire: ${file} uses ${parts[0]}/${path_segment}, but no configured site belongs to ${shared_targets.description}`); };
+            if (shared_targets.targets.length === 0) { throw new Error(`WikiWire: ${file} uses ${logical_parts[0]}/${path_segment}, but no configured site belongs to ${shared_targets.description}`); };
 
             const full_file = path.join(workspace, file);
 
@@ -356,7 +383,7 @@ async function run() : Promise<void> {
                     continue;
                 };
 
-                const mapped = map_repo_path(file, { css_content_model: site_cfg.css_content_model, ignore_content_model_errors });
+                const mapped = map_repo_path(file, { css_content_model: site_cfg.css_content_model, ignore_content_model_errors, src });
                 if (!mapped) {
                     if (ignore_content_model_errors) { core.info(`WikiWire: skipped ${file} (unsupported extension or placement)`); };
                     continue;
@@ -377,7 +404,7 @@ async function run() : Promise<void> {
         const full_file = path.join(workspace, file);
         if (kind === 'edit' && !fs.existsSync(full_file)) { core.info(`WikiWire: skipping missing or removed file ${file}`); continue };
 
-        const mapped = map_repo_path(file, { css_content_model: site_cfg.css_content_model, ignore_content_model_errors });
+        const mapped = map_repo_path(file, { css_content_model: site_cfg.css_content_model, ignore_content_model_errors, src });
         if (!mapped) {
             if (ignore_content_model_errors) { core.info(`WikiWire: skipped ${file} (unsupported extension or placement)`); };
             continue;

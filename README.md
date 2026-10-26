@@ -25,7 +25,7 @@ WikiWire is a CI action you can add to your repository's CI as a new workflow, o
 
 ## Required repository layout
 
-To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced unless at least one of `modules/`, `templates/`, `mediawiki/`, or `bucket/` exists in your repository.
+To get started, ensure your repository matches the correct layout that WikiWire expects. Content will not be synced unless at least one of `modules/`, `templates/`, `mediawiki/`, or `bucket/` exists in your repository (or under `src/` if configured).
 
 ```sh
 .
@@ -155,6 +155,8 @@ jobs:
           # dry_run: true # if you want to test your configs and routing first
 ```
 
+If `src = true`, watch `src/modules/**`, `src/templates/**`, `src/mediawiki/**`, and `src/bucket/**` in `on.push.paths` instead of the repository-root folders.
+
 This workflow assumes two things:
 
 1. You have a user account named WikiWireBot on your wiki.
@@ -204,7 +206,7 @@ After completing every step above, you should be ready to test WikiWire. Make an
 
 A common pattern is to keep production syncs on `push` to `main`, and run WikiWire with `dry_run: true` on pull requests so contributors can verify routing and titles in CI logs without editing the wiki.
 
-Non-`push` events do not provide commit compare data, so PR jobs must set `sync_all: override`. That walks every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` in the checked-out workspace (not only files changed in the PR). With `dry_run: true`, WikiWire only logs planned edits and does not log in or call `action=edit`, so credentials are optional.
+Non-`push` events do not provide commit compare data, so PR jobs must set `sync_all: override`. That walks every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` (or `src/modules/`, `src/templates/`, `src/mediawiki/`, and `src/bucket/` if configured) in the checked-out workspace (not only files changed in the PR). With `dry_run: true`, WikiWire only logs planned edits and does not log in or call `action=edit`, so credentials are optional.
 
 Add a second workflow (for example `.github/workflows/wikiwire-dry-run.yml`):
 
@@ -266,6 +268,8 @@ WikiWire waits and retries on HTTP 429/502/503/504, network timeouts, and MediaW
 For additional details, see the specification here.
 
 ## Path to wiki title mapping
+
+When `src = true`, prefix every repository path below with `src/` (for example `src/modules/<path_segment>/<root>/<root>.module.lua`). On-wiki titles are the same.
 
 | Root | Repository path | Wiki title | Content model |
 |------|-------------------|------------|----------------|
@@ -383,6 +387,7 @@ Place at the repository root unless you override with the `config_path` action i
 | `version` | integer | no | Config schema version; default `1`. Reserved for future use. |
 | `shared` | boolean | no | If true, enables `modules/shared/`, `templates/shared/`, `mediawiki/shared/`, and `bucket/shared/`, synced to every `[[sites]]` entry. Default false. |
 | `common` | boolean | no | If true, enables `modules/common/`, `templates/common/`, `mediawiki/common/`, and `bucket/common/`. Synced only to `[[sites]]` entries with `common = true`. Default false. |
+| `src` | boolean | no | If true, reads `src/modules/`, `src/templates/`, `src/mediawiki/`, and `src/bucket/` instead of those folders at the repository root. The two layouts cannot be used at the same time. Default false. |
 | `ignore_content_model_errors` | boolean | no | If true, skip files with unsupported extensions (e.g. `README.md`) instead of failing. Bare `.lua`/`.luau` and `.module.lua`/`.module.luau` under `templates/` or `mediawiki/` still error. Nested or non-`.json` files under `bucket/` are skipped. Default false. |
 | `delete_removed` | boolean | no | If true, delete on-wiki pages when the corresponding repo files are removed in a push. Also enabled by the action input of the same name. Removing a whole site or shared directory (e.g. `modules/<host>/`) is treated as a reorganization and does **not** mass-delete every module/template underneath it. Default false. |
 | `infer_page_existence` | boolean | no | If true, push-diff syncs (any sync job that doesn't use `sync_all`) skip the MediaWiki `page_exists` probe when GitHub reports a clear create vs modify status, roughly halving Action API round-trips per page which results in 2x speeds. Default false. |
@@ -393,7 +398,7 @@ Place at the repository root unless you override with the `config_path` action i
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
 | `id` | string | yes | Stable site key (sessions, logs). Must be unique across rows. |
-| `host` | string | no | Directory name under `modules/`, `templates/`, `mediawiki/`, and `bucket/`. If omitted, defaults to `id`. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` value because those names are reserved for shared site groups. |
+| `host` | string | no | Directory name under `modules/`, `templates/`, `mediawiki/`, and `bucket/` (or the same folders under `src/` when `src = true`). If omitted, defaults to `id`. Must be unique across sites. Cannot be `shared` when `shared = true`, `common` when `common = true`, or any `shared-*` value because those names are reserved for shared site groups. |
 | `api` | string | yes | Full MediaWiki API URL, e.g. `https://example.org/w/api.php`. |
 | `dry_run` | boolean | no | If true, only log planned edits/deletes; no write requests for this site. |
 | `default_branch` | string | no | If set, the action skips syncing when the workflow ref is not this branch (e.g. `refs/heads/main`). |
@@ -437,7 +442,7 @@ Credentials are **not** stored in this file. Use action inputs backed by secrets
 
 ## `.wikiwireignore`
 
-Optional file at the repository root (override with `ignore_path`). Patterns are relative to the repo root and follow **.gitignore** semantics (comments `#`, blank lines ignored; `**` and negation supported via the `ignore` package).
+Optional file at the repository root (override with `ignore_path`). Patterns are relative to the repo root and follow **.gitignore** semantics (comments `#`, blank lines ignored; `**` and negation supported via the `ignore` package). If `src = true` in `wikiwire.toml`, ignore paths under `src/modules/`, `src/templates/`, and so on.
 
 Ignored paths are skipped after change detection and never uploaded. Ignoring a path does **not** delete anything on the wiki.
 
@@ -465,7 +470,7 @@ Please note that WikiWire is currently a BETA and this shouldn't be required in 
 | `ignore_path` | no | `.wikiwireignore` | Path to the ignore file (may be missing). |
 | `dry_run` | no | `false` | If `true`, no edits or deletes are sent (site-level `dry_run` in TOML still applies per site). |
 | `delete_removed` | no | `false` | If `true`, delete on-wiki pages when repo files are removed (also enabled by `delete_removed` in `wikiwire.toml`). Entire-folder removals are skipped. Requires special permissions. |
-| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
+| `sync_all` | no | `false` | If set to `'override'`, every file under `modules/`, `templates/`, `mediawiki/`, and `bucket/` (or `src/modules/`, `src/templates/`, `src/mediawiki/`, and `src/bucket/` if configured) from the workspace will be synced instead of those that changes per-commit. Requires a prior checkout of the repo. Not recommended as this may potentially be destructive. Previously this parameter accepted `true`, but that was changed in v0.3.0 |
 
 `dark_lua_compat` was removed in WikiWire v0.3.0, and supplying it as a parameter will produce an error.
 
