@@ -12,6 +12,7 @@ WikiWire is compatible with all stable MediaWiki versions, including MW 1.43 LTS
 
 | MediaWiki Version | Supported |
 | ------- | ------------------ |
+| MediaWiki 1.46 | :white_check_mark: Supported |
 | MediaWiki 1.45 | :white_check_mark: Supported |
 | MediaWiki 1.44 | :white_check_mark: Supported |
 | MediaWiki 1.43 LTS | :white_check_mark: Supported |
