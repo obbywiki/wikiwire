@@ -176,8 +176,8 @@ importers:
         specifier: ^2.2.5
         version: 2.2.5
       ignore:
-        specifier: ^7.0.12
-        version: 7.0.12
+        specifier: ^7.0.13
+        version: 7.0.13
     devDependencies:
       '@biomejs/biome':
         specifier: 2.5.15
@@ -604,8 +604,8 @@ packages:
   fast-content-type-parse@3.0.0:
     resolution: {integrity: sha512-ZvLdcY8P+N8mGQJahJV5G4U88CSvT1rP8ApL6uETe88MBXrBHAkZlSEySdUlyztF7ccb+Znos3TFqaepHxdhBg==}
 
-  ignore@7.0.12:
-    resolution: {integrity: sha512-/8UvqAPU9DGTI9k4mxtf49U37Isfwr8Uts96+SBHIkFxPJnHS0Ew4f00sM4Scd8V8EjM0jUNtVDdv1kPdt35lg==}
+  ignore@7.0.13:
+    resolution: {integrity: sha512-2E8Q6rh+1RRSq/YdaGsNfXsEZy9FVqv6BSSrkmZJP7BnaoPnRfKL+YaofPvP+5rzdk144qSm6i4+hvPgUcbV4Q==}
     engines: {node: '>= 4'}
 
   json-with-bigint@3.5.8:
@@ -927,7 +927,7 @@ snapshots:
 
   fast-content-type-parse@3.0.0: {}
 
-  ignore@7.0.12: {}
+  ignore@7.0.13: {}
 
   json-with-bigint@3.5.8: {}
 
